@@ -1,0 +1,9 @@
+# python temporarys
+./__pycache__
+*/__pycache__
+
+#ide specific
+.idea
+
+/venv
+/data
