@@ -10,6 +10,10 @@ chmod +x install.sh
 ```sh
 export GITHUB_KEY=<private_key>
 ```
+and unset afterwards by using:
+```sh
+unset GITHUB_KEY
+```
 
 ## Usage
 If it is not active, activate the environment, by running:
