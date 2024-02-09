@@ -184,19 +184,6 @@ def findRegionsBeginningWith(instructions, blocks, word, dictionary, onlyFirst, 
 
     return foundRegions
 
-
-def findWordOccurences(file, word):
-    with open(file, 'r') as fileContent:
-        foundLines = []
-        for lineNumber, line in enumerate(fileContent):
-            if word in line:
-                foundLine = []
-                foundLine.append(lineNumber)
-                foundLine.append(line)
-                foundLines.append(foundLine)
-        return foundLines
-
-
 # write all given regions into outfile
 def writeRegions(basePrint, regions, outfile):
     for region in regions:
@@ -256,7 +243,7 @@ def parse_asm_file(fname):
     disassembly = subprocess.check_output(['objdump', '-d', fname], env={"LANG": "EN_US"},
                                           text=True)
     if not "file format elf64-x86-64" in disassembly:
-        assert False and "Not an assembly file"
+        assert False and "Not a valid assembly file"
 
     instructions = []
     instructions_in_block = []
