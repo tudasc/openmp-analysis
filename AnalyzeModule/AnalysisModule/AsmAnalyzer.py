@@ -4,6 +4,69 @@ import shutil
 import math
 from binaryornot.check import is_binary
 
+# bounds checking jump
+list_of_prefixes = ["bnd"]
+
+
+def split_str_retrun_empty(s, delim):
+    if s == "":
+        return "", ""
+    result = s.split(delim, maxsplit=1)
+    if len(result) == 1:
+        return result[0], ""
+    else:
+        return result
+
+
+class ASMInstruction:
+    # TODO documentation of fields
+    hex_instruction = None
+    region_name = None
+    block_name = None
+    address = None
+    opcode_memonic = None
+    operands = []
+    prefix = None
+
+    def __init__(self, line, region, block, block_base_addr):
+        self.region_name = region
+        self.block_name = block
+        # parse line
+        address, reminder = line.split(":", maxsplit=1)
+        self.address = address
+        # TODO calculate full address from base address?
+
+        reminder = reminder.lstrip()  # remove leading tab
+        hex_inst_str, reminder = split_str_retrun_empty(reminder, '\t')
+        self.hex_instruction = hex_inst_str.replace(' ', '')
+
+        prefix, reminder = split_str_retrun_empty(reminder, ' ')
+        if prefix in list_of_prefixes:
+            self.prefix = prefix
+        else:
+            # not a prefix but the instruction
+            reminder = prefix
+        memonic, reminder = split_str_retrun_empty(reminder, '\t')
+        self.opcode_memonic = memonic
+
+        no_comment, comment = split_str_retrun_empty(reminder, '#')
+
+        if no_comment != "":
+            self.operands = [op.strip() for op in no_comment.split(',')]
+
+
+class ASMBlock:
+    name = None
+    base_addr = None
+    instructions = []
+
+    def __init__(self, name, base_addr, instructions):
+        self.name = name
+        self.base_addr = base_addr
+        self.instructions = instructions
+        for i in instructions:
+            assert i.block_name == name
+
 
 # from AnalysisModule.Region import Region
 
@@ -71,7 +134,7 @@ def handleIf(file, fileContent, region, toLine, dictionary, backLinkNames):
 
 
 # Find all regions that begin with word, including their links
-def findRegionsBeginningWith(file, word, dictionary, onlyFirst, backLinkNames):
+def findRegionsBeginningWith(instructions, blocks, word, dictionary, onlyFirst, backLinkNames):
     if (onlyFirst):
         if (word in dictionary):
             return [].append(dictionary[word])
@@ -199,39 +262,68 @@ import subprocess
 
 from pyparsing import Word, hexnums, WordEnd, Optional, alphas, alphanums, restOfLine
 
-def parse_asm_file( fname):
 
+# TODO documentation
+# returns a list of ParseResults
+# they contain the following fields:
+# address
+# section if a section, else:
+# hex instruction
+# opcode memonic
+# operands (as list)
+
+def parse_asm_file(fname):
     # the language setting is important, so that we can check that the line
     # <filename>:     file format elf64-x86-64
     # is present
     disassembly = subprocess.check_output(['objdump', '-d', fname], env={"LANG": "EN_US"},
-                                     text=True)
+                                          text=True)
     if not "file format elf64-x86-64" in disassembly:
         assert False and "Not an assembly file"
 
+    instructions = []
+    instructions_in_block = []
+    blocks = []
+    block = ""
+    block_base_addr = ""
+    region = ""
+    # ignore the fille format line
+    for line in disassembly.splitlines()[2:]:
+        if line.startswith(' '):
+            inst = ASMInstruction(line, region, block, block_base_addr)
+            instructions.append(inst)
+            instructions_in_block.append(inst)
+        elif line.startswith("Disassembly of section"):
+            region = line[len("Disassembly of section"):-1]
+        elif line == "":
+            pass  # ignore
+        else:
+            # end block
+            if block != "":
+                blocks.append(ASMBlock(block, block_base_addr, instructions_in_block))
+                instructions_in_block = []
+            block_base_addr, block = line.split(' ')
+    if block != "":
+        blocks.append(ASMBlock(block, block_base_addr, instructions_in_block))
 
-    hex_integer = Word(hexnums) + WordEnd()  # use WordEnd to avoid parsing leading a-f of non-hex numbers as a hex
-    line_parser = (Optional((Word(hexnums)('address'))
-                            # an instruction:
-                            + Optional(':' + (hex_integer * (1,))("hex_instruction") +
-                                       Word(alphas, alphanums)("opcode_memonic") +
-                                       Optional(((Word(alphanums + "%$()") + Optional(",")) * (1,))("operands")) +
-                                       Optional("#" + restOfLine("comment")))
-                            # a section name
-                            + Optional("<" + (Word(alphanums + "_.@"))("section") + ">")))
-
-    return [line_parser.parse_string(s) for s in disassembly.splitlines()]
+    return instructions, blocks
 
 
 def main():
     fname = "/home/tim/openmp_usage_analysis/example/a.out"
-    result = parse_asm_file(fname)
-    print(result)
+    instructions, blocks = parse_asm_file(fname)
 
-    for line in result:
-        if "opcode_memonic" in line:
-            print(line.opcode_memonic)
+    regionsDic = dict()
 
+    parallel_regions = findRegionsBeginningWith(instructions, blocks, '._omp_fn.', regionsDic, False, [])
+
+    print(parallel_regions)
+
+    sys.stdout.write('\tamount of parallel regions: ' + str(len(parallel_regions)) + '\n')
+    if (len(parallel_regions) > 0):
+        sys.stdout.write('\tregions: \n')
+        writeRegions('\t', parallel_regions, sys.stdout)
+    sys.stdout.write('\n')
 
 
 if __name__ == "__main__":
