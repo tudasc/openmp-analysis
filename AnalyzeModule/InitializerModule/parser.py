@@ -12,7 +12,6 @@ class Parser:
         parser.add_argument("--keep_data", action='store_true',
                                   help='Keep all data even, when finished working on')
         parser.add_argument("--data_dir", help="Location where the repositories are lying", required = True)
-        parser.add_argument("--asm_dir", help="Location where the converted asm files should be stored", required = True)
         parser.add_argument("--results_dir", help="Location where the results should be stored", required = True)
         parser.add_argument("--ignore_endings", default='./AnalysisModule/ignore_endings.txt', action='store', help='Path to the file containing the file endings to be ignored.')
         parser.add_argument("--ignore_folders", default='./AnalysisModule/ignore_folders.txt', action="store", help="Path to the file containing the folder names to be ignored.")
