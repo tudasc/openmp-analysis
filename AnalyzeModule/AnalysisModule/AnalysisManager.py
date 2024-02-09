@@ -16,7 +16,10 @@ def analyze_asm_repo_single_arg(args):
 
 
 def analyze_asm_repo(repo_name, repo_base_path, resultdir, ignore_endings, ignore_folders, refresh_repos, keep_data):
-    outfile = resultdir + '/' + repo_name + '.results'
+
+    outdir = os.path.join(resultdir, repo_name)
+    os.makedirs(outdir, exist_ok=True)
+
     print("analyze repo: " + repo_name)
 
     for root, dirs, files in os.walk(os.path.join(repo_base_path, repo_name)):
@@ -31,7 +34,7 @@ def analyze_asm_repo(repo_name, repo_base_path, resultdir, ignore_endings, ignor
             if analyze:
                 print("analyze file: %s" % this_file)
                 analyzer = AsmAnalyzer()
-                analyzer(this_file, outfile, keep_data)
+                analyzer(this_file, os.path.join(outdir,name), keep_data)
             else:
                 print("skip file %s"%this_file)
 
@@ -63,7 +66,12 @@ class AnalysisManager:
                            self._keep_data) for
                           repo_dir in
                           os.listdir(self._datadir)]
-            list(tqdm.tqdm(pool.imap_unordered(analyze_asm_repo_single_arg, param_list), total=len(param_list)))
+
+            #serial processing
+            result = [analyze_asm_repo_single_arg(p) for p in param_list]
+
+            # parallel processing
+            #list(tqdm.tqdm(pool.imap_unordered(analyze_asm_repo_single_arg, param_list), total=len(param_list)))
             print('Analysation finished.')
 
         return 0
