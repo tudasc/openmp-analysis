@@ -2,12 +2,17 @@ import os
 import sys
 import shutil
 import math
-from binaryornot.check import is_binary
+import subprocess
+
+from AnalyzeModule.AnalysisModule.Region import Region
+
+# from AnalysisModule.Region import Region
 
 # bounds checking jump
 list_of_prefixes = ["bnd"]
 
 
+# helpe function that also works for empty strings
 def split_str_retrun_empty(s, delim):
     if s == "":
         return "", ""
@@ -33,7 +38,7 @@ class ASMInstruction:
         self.block_name = block
         # parse line
         address, reminder = line.split(":", maxsplit=1)
-        self.address = address
+        self.address = int(address, 16)
         # TODO calculate full address from base address?
 
         reminder = reminder.lstrip()  # remove leading tab
@@ -44,11 +49,11 @@ class ASMInstruction:
         if prefix in list_of_prefixes:
             self.prefix = prefix
         else:
-            # not a prefix but the instruction
-            reminder = prefix
-        memonic, reminder = split_str_retrun_empty(reminder, '\t')
-        self.opcode_memonic = memonic
+            # not a prefix: use original reminder
+            reminder = prefix + ' ' + reminder
 
+        memonic, reminder = split_str_retrun_empty(reminder, ' ')
+        self.opcode_memonic = memonic
         no_comment, comment = split_str_retrun_empty(reminder, '#')
 
         if no_comment != "":
@@ -62,25 +67,10 @@ class ASMBlock:
 
     def __init__(self, name, base_addr, instructions):
         self.name = name
-        self.base_addr = base_addr
+        self.base_addr = int(base_addr, 16)
         self.instructions = instructions
         for i in instructions:
             assert i.block_name == name
-
-
-# from AnalysisModule.Region import Region
-
-def checkLocationForAssemblerFiles(src):
-    files = []
-    for file in os.listdir(src):
-        if os.path.exists(src + file + '/'):
-            newsrc = src + file + '/'
-            files.extend(checkLocationForAssemblerFiles(newsrc))
-        elif file.endswith('.ASM'):
-            files.append(src + file)
-        elif file.endswith('.asm'):
-            files.append(src + file)
-    return files
 
 
 def handleRecursion(region):
@@ -133,65 +123,65 @@ def handleIf(file, fileContent, region, toLine, dictionary, backLinkNames):
                                 return math.floor(instructionCount / 2), lineOffset + lineNumber + 1
 
 
+def get_target_addr(inst):
+    tgt = inst.operands[0]
+    return int(tgt.split()[0], 16)
+
+
+def analyze_parallel_region(instructions, blocks, parallel_region_block):
+    actualRegion = Region(parallel_region_block.name, parallel_region_block.base_addr)
+    blocks_leading_to_recursion = [parallel_region_block]
+
+    instruction_weight = 1.0
+
+    for inst in parallel_region_block.instructions:
+        actualRegion.instructionCount += 1 * instruction_weight
+        if 'call' in inst.opcode_memonic:
+            tgt_addr = get_target_addr(inst)
+            target_block = [b for b in blocks if b.base_addr == tgt_addr][0]
+            if target_block in blocks_leading_to_recursion:
+                #RECURSION
+                handleRecursion(actualRegion)
+            else:
+                # TODO handle link
+                continue
+                linkWord = splitted[len(splitted) - 1]
+                linkRegion = findRegionsBeginningWith(file, linkWord, dictionary, True,
+                                                      backLinkNames.copy())
+                if (linkRegion != None and len(linkRegion) == 1):
+                    actualRegion.links += linkRegion[0].links
+                    actualRegion.links += 1
+                    actualRegion.instructionCount += linkRegion[0].instructionCount
+                    actualRegion.recursions += linkRegion[0].recursions
+                    actualRegion.loops += linkRegion[0].loops
+                    actualRegion.conditionals += linkRegion[0].conditionals
+        # jump
+        if inst.opcode_memonic.startswith('j'):
+            tgt_addr = get_target_addr(inst)
+            if tgt_addr > inst.address:
+                # backward jump
+                # LOOP
+                # TODO handle Loop
+                print("backward jump")
+            else:
+                # forward jump
+                # IF
+                print("forward jump")
+                # TODO handle if
+
+    return actualRegion
+
+
 # Find all regions that begin with word, including their links
 def findRegionsBeginningWith(instructions, blocks, word, dictionary, onlyFirst, backLinkNames):
-    if (onlyFirst):
-        if (word in dictionary):
-            return [].append(dictionary[word])
-
-    lineOffset = 0
     foundRegions = []
-    actualRegion = None
-    with open(file, 'r') as fileContent:
-        for lineNumber, line in enumerate(fileContent):
-            lineNumber += lineOffset
-            if (actualRegion == None):
-                if (len(line.split()) == 2 and word in line):
-                    name = line.split()[1].removesuffix(':')
-                    backLinkNames.append(name)
-                    actualRegion = Region(name, lineNumber)
-            else:
-                if (len(line.strip()) == 0):
-                    actualRegion.end = lineNumber
-                    if (actualRegion.recursions != 0):
-                        actualRegion.instructionCount = actualRegion.instructionCount * actualRegion.recursions
-                    foundRegions.append(actualRegion)
-                    if (onlyFirst):
-                        break
-                    actualRegion = None
-                    backLinkNames = []
-                else:
-                    actualRegion.instructionCount += 1
-                    splitted = line.split()
-                    if (len(splitted) > 2):
-                        if ('call' in splitted[-3]):
-                            if (splitted[len(splitted) - 1] in backLinkNames):
-                                handleRecursion(actualRegion)
-                            else:
-                                linkWord = splitted[len(splitted) - 1]
-                                linkRegion = findRegionsBeginningWith(file, linkWord, dictionary, True,
-                                                                      backLinkNames.copy())
-                                if (linkRegion != None and len(linkRegion) == 1):
-                                    actualRegion.links += linkRegion[0].links
-                                    actualRegion.links += 1
-                                    actualRegion.instructionCount += linkRegion[0].instructionCount
-                                    actualRegion.recursions += linkRegion[0].recursions
-                                    actualRegion.loops += linkRegion[0].loops
-                                    actualRegion.conditionals += linkRegion[0].conditionals
+    for b in blocks:
+        if word in b.name:
+            print("found Parallel Region")
+            print(b.name)
 
-                        if (splitted[len(splitted) - 3].startswith('j')):
-                            fromLine = splitted[0].removesuffix(':')
-                            toLine = splitted[len(splitted) - 2]
-                            if (int(toLine, 16) < int(fromLine, 16)):
-                                actualRegion.instructionCount += handleLoop(actualRegion, fromLine, toLine)
-                            else:
-                                result = handleIf(file, fileContent, actualRegion, toLine, dictionary,
-                                                  backLinkNames.copy())
-                                actualRegion.instructionCount += result[0]
-                                lineOffset += result[1]
-                                actualRegion.instructionCount += 1
-            if (onlyFirst):
-                dictionary.update({word: actualRegion})
+            foundRegions.append(analyze_parallel_region(instructions, blocks, b))
+
     return foundRegions
 
 
@@ -229,23 +219,15 @@ class AsmAnalyzer:
         pass
 
     # perform the analyses
-    def __call__(self, source, outfile, keep_data=False):
-        files = checkLocationForAssemblerFiles(source)
+    def __call__(self, source, outfile):
+        instructions, blocks = parse_asm_file(source)
 
-        # Checking if the folder contains no .ASM files.
-        if len(files) == 0:
-            print('No .ASM or .asm files exist in folder specified and it\'s subfolders')
-            sys.exit()
+        regionsDic = dict()
 
-        outfile = open('%s' % outfile, 'w')
+        parallel_regions = findRegionsBeginningWith(instructions, blocks, '._omp_fn.', regionsDic, False, [])
 
-        for file in files:
-
-            regionsDic = dict()
-
-            parallel_regions = findRegionsBeginningWith(file, '._omp_fn.', regionsDic, False, [])
-
-            outfile.write(os.path.basename(file) + ': \n')
+        with open('%s' % outfile, 'w') as outfile:
+            outfile.write(os.path.basename(source) + ': \n')
             outfile.write('\tamount of parallel regions: ' + str(len(parallel_regions)) + '\n')
             if (len(parallel_regions) > 0):
                 outfile.write('\tregions: \n')
@@ -256,11 +238,6 @@ class AsmAnalyzer:
         #    shutil.rmtree(source)
 
         return 0
-
-
-import subprocess
-
-from pyparsing import Word, hexnums, WordEnd, Optional, alphas, alphanums, restOfLine
 
 
 # TODO documentation
@@ -307,24 +284,3 @@ def parse_asm_file(fname):
         blocks.append(ASMBlock(block, block_base_addr, instructions_in_block))
 
     return instructions, blocks
-
-
-def main():
-    fname = "/home/tim/openmp_usage_analysis/example/a.out"
-    instructions, blocks = parse_asm_file(fname)
-
-    regionsDic = dict()
-
-    parallel_regions = findRegionsBeginningWith(instructions, blocks, '._omp_fn.', regionsDic, False, [])
-
-    print(parallel_regions)
-
-    sys.stdout.write('\tamount of parallel regions: ' + str(len(parallel_regions)) + '\n')
-    if (len(parallel_regions) > 0):
-        sys.stdout.write('\tregions: \n')
-        writeRegions('\t', parallel_regions, sys.stdout)
-    sys.stdout.write('\n')
-
-
-if __name__ == "__main__":
-    main()
