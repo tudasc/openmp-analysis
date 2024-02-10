@@ -33,13 +33,12 @@ class ASMInstruction:
     operands = []
     prefix = None
 
-    def __init__(self, line, region, block, block_base_addr):
+    def __init__(self, line, region, block):
         self.region_name = region
         self.block_name = block
         # parse line
         address, reminder = line.split(":", maxsplit=1)
         self.address = int(address, 16)
-        # TODO calculate full address from base address?
 
         reminder = reminder.lstrip()  # remove leading tab
         hex_inst_str, reminder = split_str_retrun_empty(reminder, '\t')
@@ -254,7 +253,7 @@ def parse_asm_file(fname):
     # ignore the fille format line
     for line in disassembly.splitlines()[2:]:
         if line.startswith(' '):
-            inst = ASMInstruction(line, region, block, block_base_addr)
+            inst = ASMInstruction(line, region, block)
             instructions.append(inst)
             instructions_in_block.append(inst)
         elif line.startswith("Disassembly of section"):
