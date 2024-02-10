@@ -80,56 +80,18 @@ def handleLoop(instructions, blocks, stadt_address, end_address, region):
     region.loops += 1
     region.instructionCount += 399
 
-
-def handleIf(file, fileContent, region, toLine, dictionary, backLinkNames):
-    instructionCount = 0
-    lineOffset = 0
-    for lineNumber, line in enumerate(fileContent):
-        splitted = line.split()
-        if (len(splitted) == 0 or (len(splitted) > 0 and splitted[0].removesuffix(':') == toLine)):
-            region.conditionals += 1
-            return math.floor(instructionCount / 2), lineOffset + lineNumber + 1
-        else:
-            instructionCount += 1
-            if (len(splitted) > 2):
-                if ('call' in splitted[-3]):
-                    if (splitted[len(splitted) - 1] in backLinkNames):
-                        handleRecursion(region)
-                    else:
-                        linkWord = splitted[len(splitted) - 1]
-                        linkRegion = findRegionsBeginningWith(file, linkWord, dictionary, True, backLinkNames.copy())
-                        if (linkRegion != None and len(linkRegion) == 1):
-                            region.links += linkRegion[0].links
-                            region.links += 1
-                            instructionCount += linkRegion[0].instructionCount
-                            region.recursions += linkRegion[0].recursions
-                            region.loops += linkRegion[0].loops
-                            region.conditionals += linkRegion[0].conditionals
-
-                if (splitted[len(splitted) - 3].startswith('j')):
-                    newFromLine = splitted[0].removesuffix(':')
-                    newToLine = splitted[len(splitted) - 2]
-                    if (int(newToLine, 16) < int(newFromLine, 16)):
-                        instructionCount += handleLoop(region, newFromLine, newToLine)
-                    else:
-                        if (newToLine <= toLine):
-                            result = handleIf(file, fileContent, region, newToLine, dictionary, backLinkNames.copy())
-                            instructionCount += result[0]
-                            lineOffset += result[1]
-                            instructionCount += 1
-                            if (newToLine == toLine):
-                                region.conditionals += 1
-                                return math.floor(instructionCount / 2), lineOffset + lineNumber + 1
-
-
 def get_target_addr(inst):
-    tgt = inst.operands[0]
-    return int(tgt.split()[0], 16)
+    try:
+        tgt = inst.operands[0]
+        return int(tgt.split()[0], 16)
+    except ValueError:
+        #inndirect call or jmp, target depends on register
+        return None
 
 
-def analyze_parallel_region(instructions, blocks, parallel_region_block):
+def analyze_parallel_region(instructions, blocks, parallel_region_block,blocks_leading_to_recursion_param=[]):
     actualRegion = Region(parallel_region_block.name, parallel_region_block.base_addr)
-    blocks_leading_to_recursion = [parallel_region_block]
+    blocks_leading_to_recursion = blocks_leading_to_recursion_param + [parallel_region_block]
 
     instruction_weight = 1.0
     next_meeting_point = []
@@ -142,45 +104,43 @@ def analyze_parallel_region(instructions, blocks, parallel_region_block):
         actualRegion.instructionCount += 1 * instruction_weight
         if 'call' in inst.opcode_memonic:
             tgt_addr = get_target_addr(inst)
-            target_block = [b for b in blocks if b.base_addr == tgt_addr][0]
-            if target_block in blocks_leading_to_recursion:
-                # RECURSION
-                handleRecursion(actualRegion)
-            else:
-                # TODO handle link
-                continue
-                linkWord = splitted[len(splitted) - 1]
-                linkRegion = findRegionsBeginningWith(file, linkWord, dictionary, True,
-                                                      backLinkNames.copy())
-                if (linkRegion != None and len(linkRegion) == 1):
-                    actualRegion.links += linkRegion[0].links
-                    actualRegion.links += 1
-                    actualRegion.instructionCount += linkRegion[0].instructionCount
-                    actualRegion.recursions += linkRegion[0].recursions
-                    actualRegion.loops += linkRegion[0].loops
-                    actualRegion.conditionals += linkRegion[0].conditionals
-        # jump
-        if inst.opcode_memonic.startswith('j'):
-            tgt_addr = get_target_addr(inst)
-            if tgt_addr < inst.address:
-                # backward jump
-                # LOOP
-                # TODO handle Loop
-                handleLoop(instructions, blocks, tgt_addr, inst.address, actualRegion)
-            else:
-                if inst.opcode_memonic == "jmp":
-                    # unconditional branch
-                    next_meeting_point.append(tgt_addr)
-                    # before, the two branches will not meet
-                    next_meeting_point = [addr for addr in next_meeting_point if addr >= tgt_addr]
-                    assert sorted(next_meeting_point) == next_meeting_point  # should still be sorted
-                    pass
+            if tgt_addr is not None:
+                target_block = [b for b in blocks if b.base_addr == tgt_addr][0]
+                if target_block in blocks_leading_to_recursion:
+                    # RECURSION
+                    handleRecursion(actualRegion)
                 else:
-                    # forward jump
-                    # IF
-                    # ecch branhc has same likeleyhood
-                    instruction_weight = instruction_weight * 0.5
-                    next_meeting_point.append(tgt_addr)
+                    # handle link
+                    linkRegion = analyze_parallel_region(instructions, blocks, target_block,blocks_leading_to_recursion.copy())
+                    if (linkRegion != None):
+                        actualRegion.links += linkRegion.links
+                        actualRegion.links += 1
+                        actualRegion.instructionCount += linkRegion.instructionCount
+                        actualRegion.recursions += linkRegion.recursions
+                        actualRegion.loops += linkRegion.loops
+                        actualRegion.conditionals += linkRegion.conditionals
+            # jump
+            if inst.opcode_memonic.startswith('j'):
+                tgt_addr = get_target_addr(inst)
+                if tgt_addr < inst.address:
+                    # backward jump
+                    # LOOP
+                    # TODO handle Loop
+                    handleLoop(instructions, blocks, tgt_addr, inst.address, actualRegion)
+                else:
+                    if inst.opcode_memonic == "jmp":
+                        # unconditional branch
+                        next_meeting_point.append(tgt_addr)
+                        # before, the two branches will not meet
+                        next_meeting_point = [addr for addr in next_meeting_point if addr >= tgt_addr]
+                        assert sorted(next_meeting_point) == next_meeting_point  # should still be sorted
+                        pass
+                    else:
+                        # forward jump
+                        # IF
+                        # ecch branhc has same likeleyhood
+                        instruction_weight = instruction_weight * 0.5
+                        next_meeting_point.append(tgt_addr)
 
     return actualRegion
 
