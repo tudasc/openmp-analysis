@@ -80,16 +80,17 @@ def handleLoop(instructions, blocks, stadt_address, end_address, region):
     region.loops += 1
     region.instructionCount += 399
 
+
 def get_target_addr(inst):
     try:
         tgt = inst.operands[0]
         return int(tgt.split()[0], 16)
     except ValueError:
-        #inndirect call or jmp, target depends on register
+        # inndirect call or jmp, target depends on register
         return None
 
 
-def analyze_parallel_region(instructions, blocks, parallel_region_block,blocks_leading_to_recursion_param=[]):
+def analyze_parallel_region(instructions, blocks, parallel_region_block, blocks_leading_to_recursion_param=[]):
     actualRegion = Region(parallel_region_block.name, parallel_region_block.base_addr)
     blocks_leading_to_recursion = blocks_leading_to_recursion_param + [parallel_region_block]
 
@@ -111,7 +112,8 @@ def analyze_parallel_region(instructions, blocks, parallel_region_block,blocks_l
                     handleRecursion(actualRegion)
                 else:
                     # handle link
-                    linkRegion = analyze_parallel_region(instructions, blocks, target_block,blocks_leading_to_recursion.copy())
+                    linkRegion = analyze_parallel_region(instructions, blocks, target_block,
+                                                         blocks_leading_to_recursion.copy())
                     if (linkRegion != None):
                         actualRegion.links += linkRegion.links
                         actualRegion.links += 1
@@ -141,6 +143,7 @@ def analyze_parallel_region(instructions, blocks, parallel_region_block,blocks_l
                         # ecch branhc has same likeleyhood
                         instruction_weight = instruction_weight * 0.5
                         next_meeting_point.append(tgt_addr)
+                        actualRegion.conditionals += 1
 
     return actualRegion
 
