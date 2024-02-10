@@ -76,9 +76,9 @@ def handleRecursion(region):
     region.recursions += 1
 
 
-def handleLoop(region, fromLine, toLine):
+def handleLoop(instructions, blocks, stadt_address, end_address, region):
     region.loops += 1
-    return 399
+    region.instructionCount += 399
 
 
 def handleIf(file, fileContent, region, toLine, dictionary, backLinkNames):
@@ -132,14 +132,19 @@ def analyze_parallel_region(instructions, blocks, parallel_region_block):
     blocks_leading_to_recursion = [parallel_region_block]
 
     instruction_weight = 1.0
+    next_meeting_point = []
 
     for inst in parallel_region_block.instructions:
+        if len(next_meeting_point) > 0 and inst.address == next_meeting_point[0]:
+            instruction_weight = instruction_weight * 2  # re-union of if
+            next_meeting_point.remove(next_meeting_point[0])
+
         actualRegion.instructionCount += 1 * instruction_weight
         if 'call' in inst.opcode_memonic:
             tgt_addr = get_target_addr(inst)
             target_block = [b for b in blocks if b.base_addr == tgt_addr][0]
             if target_block in blocks_leading_to_recursion:
-                #RECURSION
+                # RECURSION
                 handleRecursion(actualRegion)
             else:
                 # TODO handle link
@@ -157,16 +162,25 @@ def analyze_parallel_region(instructions, blocks, parallel_region_block):
         # jump
         if inst.opcode_memonic.startswith('j'):
             tgt_addr = get_target_addr(inst)
-            if tgt_addr > inst.address:
+            if tgt_addr < inst.address:
                 # backward jump
                 # LOOP
                 # TODO handle Loop
-                print("backward jump")
+                handleLoop(instructions, blocks, tgt_addr, inst.address, actualRegion)
             else:
-                # forward jump
-                # IF
-                print("forward jump")
-                # TODO handle if
+                if inst.opcode_memonic == "jmp":
+                    # unconditional branch
+                    next_meeting_point.append(tgt_addr)
+                    # before, the two branches will not meet
+                    next_meeting_point = [addr for addr in next_meeting_point if addr >= tgt_addr]
+                    assert sorted(next_meeting_point) == next_meeting_point  # should still be sorted
+                    pass
+                else:
+                    # forward jump
+                    # IF
+                    # ecch branhc has same likeleyhood
+                    instruction_weight = instruction_weight * 0.5
+                    next_meeting_point.append(tgt_addr)
 
     return actualRegion
 
@@ -182,6 +196,7 @@ def findRegionsBeginningWith(instructions, blocks, word, dictionary, onlyFirst, 
             foundRegions.append(analyze_parallel_region(instructions, blocks, b))
 
     return foundRegions
+
 
 # write all given regions into outfile
 def writeRegions(basePrint, regions, outfile):
