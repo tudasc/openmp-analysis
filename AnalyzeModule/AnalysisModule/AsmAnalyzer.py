@@ -5,7 +5,7 @@ import math
 import subprocess
 import angr
 import networkx as nx
-from angrutils import *
+#from angrutils import *
 
 from AnalyzeModule.AnalysisModule.Region import Region
 
@@ -247,8 +247,7 @@ class AsmAnalyzer:
             print(func.name)
             print("cyclomatic_complexity:")
             print(func.cyclomatic_complexity)
-            plot_cfg(cfg, outfile, asminst=True, func_addr={func.addr: True}, remove_imports=True,
-                     remove_path_terminator=True)
+            #plot_cfg(cfg, outfile, asminst=True, func_addr={func.addr: True}, remove_imports=True,remove_path_terminator=True)
 
         instructions, blocks = parse_asm_file(source)
 

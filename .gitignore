@@ -9,10 +9,6 @@ REPOS_SAMPLE/*/a.out
 # output dir
 result_sample
 
-# build dir to build angr
-angr-dev
-
-
 #ide specific
 .idea
 
