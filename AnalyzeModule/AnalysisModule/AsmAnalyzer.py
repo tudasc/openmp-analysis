@@ -3,6 +3,8 @@ import sys
 import shutil
 import math
 import subprocess
+import angr
+from angrutils import *
 
 from AnalyzeModule.AnalysisModule.Region import Region
 
@@ -184,6 +186,17 @@ class AsmAnalyzer:
 
     # perform the analyses
     def __call__(self, source, outfile):
+        proj = angr.Project(source, load_options={'auto_load_libs': False})
+        cfg = proj.analyses.CFGFast()
+        functions = dict(proj.kb.functions)
+        openmp_regions = {addr: func for addr, func in functions.items() if '._omp_fn.' in func.name}
+
+        for addr, func in openmp_regions.items():
+            print(func)
+            print("cyclomatic_complexity:")
+            print(func.cyclomatic_complexity)
+            plot_cfg(cfg, "cfg", asminst=True, func_addr={func.addr: True}, remove_imports=True, remove_path_terminator=True)
+
         instructions, blocks = parse_asm_file(source)
 
         regionsDic = dict()
