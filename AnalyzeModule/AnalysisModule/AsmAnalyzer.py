@@ -14,6 +14,47 @@ from AnalyzeModule.AnalysisModule.Region import Region
 list_of_prefixes = ["bnd"]
 
 
+class MyAnalysis(angr.Analysis):
+
+    def __init__(self, option="some_option"):
+        self.option = option
+        self.cfg = self.project.analyses.CFGFast()
+        # cache the analyzed functions
+        self.function_analysis_result_cache = {}
+
+        self.result = []
+        self.run()
+
+    def analyze_function(self, func):
+
+        if func in self.function_analysis_result_cache:
+            return self.function_analysis_result_cache[func]
+        current_region = Region(func.name, func.addr)
+        for block in func.blocks:
+            cfg_node = self.cfg.get_node(block.addr)
+            # successors
+            for s in self.cfg.get_successors_and_jumpkind(cfg_node):
+                # print(s)
+                pass
+            for inst in block.disassembly.insns:
+                # how to retreive the disassebbly memonic:
+                # print(inst.mnemonic)
+                current_region.instructionCount += 1
+
+        self.function_analysis_result_cache[func] = current_region
+        return current_region
+
+    def run(self):
+
+        # self.kb has the KnowledgeBase object
+        openmp_regions = {addr: func for addr, func in self.kb.functions.items() if '._omp_fn.' in func.name}
+        for addr, func in openmp_regions.items():
+            self.result.append(self.analyze_function(func))
+
+
+angr.analyses.register_analysis(MyAnalysis, 'MyAnalysis')  # register the class with angr's global analysis list
+
+
 # helpe function that also works for empty strings
 def split_str_retrun_empty(s, delim):
     if s == "":
@@ -187,21 +228,23 @@ class AsmAnalyzer:
     # perform the analyses
     def __call__(self, source, outfile):
         proj = angr.Project(source, load_options={'auto_load_libs': False})
+
         cfg = proj.analyses.CFGFast()
         functions = dict(proj.kb.functions)
         openmp_regions = {addr: func for addr, func in functions.items() if '._omp_fn.' in func.name}
 
         for addr, func in openmp_regions.items():
-            print(func)
+            print(func.name)
             print("cyclomatic_complexity:")
             print(func.cyclomatic_complexity)
-            plot_cfg(cfg, "cfg", asminst=True, func_addr={func.addr: True}, remove_imports=True, remove_path_terminator=True)
+            plot_cfg(cfg, "cfg", asminst=True, func_addr={func.addr: True}, remove_imports=True,
+                     remove_path_terminator=True)
 
         instructions, blocks = parse_asm_file(source)
 
         regionsDic = dict()
 
-        parallel_regions = findRegionsBeginningWith(instructions, blocks, '._omp_fn.', regionsDic, False, [])
+        parallel_regions = analysis = proj.analyses.MyAnalysis().result
 
         with open('%s' % outfile, 'w') as outfile:
             outfile.write(os.path.basename(source) + ': \n')
