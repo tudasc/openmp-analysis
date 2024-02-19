@@ -4,6 +4,7 @@ import shutil
 import math
 import subprocess
 import angr
+import networkx as nx
 from angrutils import *
 
 from AnalyzeModule.AnalysisModule.Region import Region
@@ -19,14 +20,21 @@ class MyAnalysis(angr.Analysis):
     def __init__(self, option="some_option"):
         self.option = option
         self.cfg = self.project.analyses.CFGFast()
+        # detect loops
+        self.cfg_cycles = list(nx.simple_cycles(self.cfg.graph))
+
+        self.callgraph = self.kb.callgraph
+        # detect recursion
+        self.callgraph_cycles = list(nx.simple_cycles(self.callgraph))
+
         # cache the analyzed functions
         self.function_analysis_result_cache = {}
 
+        # perform analysis
         self.result = []
         self.run()
 
     def analyze_function(self, func):
-
         if func in self.function_analysis_result_cache:
             return self.function_analysis_result_cache[func]
         current_region = Region(func.name, func.addr)
@@ -35,7 +43,10 @@ class MyAnalysis(angr.Analysis):
             # successors
             for s in self.cfg.get_successors_and_jumpkind(cfg_node):
                 # print(s)
+                # handle loop, if and call
                 pass
+            # handle recursion
+            # can detect recursion with self.callgraph_cycles
             for inst in block.disassembly.insns:
                 # how to retreive the disassebbly memonic:
                 # print(inst.mnemonic)
@@ -45,7 +56,6 @@ class MyAnalysis(angr.Analysis):
         return current_region
 
     def run(self):
-
         # self.kb has the KnowledgeBase object
         openmp_regions = {addr: func for addr, func in self.kb.functions.items() if '._omp_fn.' in func.name}
         for addr, func in openmp_regions.items():
@@ -237,7 +247,7 @@ class AsmAnalyzer:
             print(func.name)
             print("cyclomatic_complexity:")
             print(func.cyclomatic_complexity)
-            plot_cfg(cfg, "cfg", asminst=True, func_addr={func.addr: True}, remove_imports=True,
+            plot_cfg(cfg, outfile, asminst=True, func_addr={func.addr: True}, remove_imports=True,
                      remove_path_terminator=True)
 
         instructions, blocks = parse_asm_file(source)
