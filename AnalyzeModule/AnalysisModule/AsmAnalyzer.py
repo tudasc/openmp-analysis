@@ -1,8 +1,11 @@
+import itertools
 import os
 import sys
 import shutil
 import math
 import subprocess
+from collections import OrderedDict
+
 import angr
 import networkx as nx
 from angrutils import plot_cfg
@@ -15,6 +18,16 @@ from AnalyzeModule.AnalysisModule.Region import Region
 
 # bounds checking jump
 list_of_prefixes = ["bnd"]
+
+
+def handleRecursion(region):
+    region.recursions += 1
+
+
+def handleLoop(loop, region):
+    print("LOOP DETECTED")
+    region.loops += 1
+    region.instructionCount += 399
 
 
 class MyAnalysis(angr.Analysis):
@@ -39,13 +52,23 @@ class MyAnalysis(angr.Analysis):
     def analyze_function(self, func):
         if func in self.function_analysis_result_cache:
             return self.function_analysis_result_cache[func]
+
+        # initialize empty new region
         current_region = Region(func.name, func.addr)
+
+        # a loop may comprise several blocks
+        # we collect all blocks already handled here, so that we dont handle loops multiple times
+        loops_handled =set()
         for block in func.blocks:
+            for inst in block.disassembly.insns:
+                # how to retrieve the disassembly memonic:
+                # print(inst.mnemonic)
+                current_region.instructionCount += 1
+
             cfg_node = self.cfg.get_node(block.addr)
-            print(cfg_node)
             # successors
             for tgt, jmp_kind in self.cfg.get_successors_and_jumpkind(cfg_node):
-                # TODO handle loop, if
+                # TODO handle if
                 # handle call
                 if jmp_kind == 'Ijk_Call':
                     tgt_func = self.kb.functions.get_by_addr(tgt.addr)
@@ -58,10 +81,16 @@ class MyAnalysis(angr.Analysis):
                         pass
                 pass
 
-            for inst in block.disassembly.insns:
-                # how to retrieve the disassembly memonic:
-                # print(inst.mnemonic)
-                current_region.instructionCount += 1
+            if cfg_node not in loops_handled:
+                for loop in self.cfg_cycles:
+                    if cfg_node in loop:
+                        for node in loop:
+                            loops_handled.add(node)
+                        print(cfg_node)
+                        print(loop)
+                        print(loops_handled)
+                        #TODO why are there so many loops in the cfg?
+                        handleLoop(loop, current_region)
 
         # end for each block
 
@@ -69,8 +98,7 @@ class MyAnalysis(angr.Analysis):
         # can detect recursion with self.callgraph_cycles
         for cycle in self.callgraph_cycles:
             if func.addr in cycle:
-                #print("RECURSION DETECTED")
-                current_region.recursions += 1
+                handleRecursion(current_region)
 
         self.function_analysis_result_cache[func] = current_region
         return current_region
@@ -143,15 +171,6 @@ class ASMBlock:
         self.instructions = instructions
         for i in instructions:
             assert i.block_name == name
-
-
-def handleRecursion(region):
-    region.recursions += 1
-
-
-def handleLoop(instructions, blocks, stadt_address, end_address, region):
-    region.loops += 1
-    region.instructionCount += 399
 
 
 def get_target_addr(inst):
