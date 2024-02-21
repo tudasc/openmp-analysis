@@ -36,7 +36,7 @@ class MyAnalysis(angr.Analysis):
         self.option = option
         self.cfg = self.project.analyses.CFGFast()
         # detect loops
-        self.cfg_cycles = list(nx.simple_cycles(self.cfg.graph))
+        self.loops = list(nx.simple_cycles(self.get_pruned_cfg()))
 
         self.callgraph = self.kb.callgraph
         # detect recursion
@@ -58,7 +58,7 @@ class MyAnalysis(angr.Analysis):
 
         # a loop may comprise several blocks
         # we collect all blocks already handled here, so that we dont handle loops multiple times
-        loops_handled =set()
+        loops_handled = set()
         for block in func.blocks:
             for inst in block.disassembly.insns:
                 # how to retrieve the disassembly memonic:
@@ -82,14 +82,9 @@ class MyAnalysis(angr.Analysis):
                 pass
 
             if cfg_node not in loops_handled:
-                for loop in self.cfg_cycles:
+                for loop in self.loops:
                     if cfg_node in loop:
-                        for node in loop:
-                            loops_handled.add(node)
-                        print(cfg_node)
-                        print(loop)
-                        print(loops_handled)
-                        #TODO why are there so many loops in the cfg?
+                        loops_handled.update(loop)
                         handleLoop(loop, current_region)
 
         # end for each block
@@ -108,6 +103,19 @@ class MyAnalysis(angr.Analysis):
         openmp_regions = {addr: func for addr, func in self.kb.functions.items() if '._omp_fn.' in func.name}
         for addr, func in openmp_regions.items():
             self.result.append(self.analyze_function(func))
+
+    # prune the CFG to remove all "call" and "return" edges, as they will be handles in the callgraph in our analysis
+    def get_pruned_cfg(self):
+        graph = self.cfg.graph.copy()
+        # collect edges to remove
+        to_remove = []
+        for u, v, kind in graph.edges(data="jumpkind"):
+            if kind == 'Ijk_Ret' or kind == 'Ijk_Call':
+                to_remove.append((u, v))
+
+        for edge in to_remove:
+            graph.remove_edge(edge[0], edge[1])
+        return graph
 
 
 angr.analyses.register_analysis(MyAnalysis, 'MyAnalysis')  # register the class with angr's global analysis list
@@ -283,18 +291,19 @@ class AsmAnalyzer:
         openmp_regions = {addr: func for addr, func in functions.items() if '._omp_fn.' in func.name}
 
         for addr, func in functions.items():
-            #Edges Style:
-            #Edge class 	Color 	Style
-            #Conditional True 	Green
-            #Conditional False 	Red
-            #Unconditional 	Blue
-            #Next 	Blue 	Dashed
-            #Call 	Black
-            #Return 	Gray
-            #Fake Return 	Gray 	Dotted
-            #Unknown 	Orange
-            fname_to_use = outfile+"_"+func.name
-            plot_cfg(cfg, fname_to_use, asminst=True, func_addr={func.addr: True}, remove_imports=True,remove_path_terminator=True)
+            # Edges Style:
+            # Edge class 	Color 	Style
+            # Conditional True 	Green
+            # Conditional False 	Red
+            # Unconditional 	Blue
+            # Next 	Blue 	Dashed
+            # Call 	Black
+            # Return 	Gray
+            # Fake Return 	Gray 	Dotted
+            # Unknown 	Orange
+            fname_to_use = outfile + "_" + func.name
+            plot_cfg(cfg, fname_to_use, asminst=True, func_addr={func.addr: True}, remove_imports=True,
+                     remove_path_terminator=True)
 
         for addr, func in openmp_regions.items():
             print(func.name)
