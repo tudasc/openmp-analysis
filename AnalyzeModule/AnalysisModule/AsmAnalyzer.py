@@ -7,6 +7,7 @@ import subprocess
 from collections import OrderedDict
 
 import angr
+import networkx
 import networkx as nx
 from angrutils import plot_cfg
 
@@ -20,12 +21,26 @@ from AnalyzeModule.AnalysisModule.Region import Region
 list_of_prefixes = ["bnd"]
 
 
+# prune the CFG to remove all "call" and "return" edges, as they will be handles in the callgraph in our analysis
+# returns pruned copy
+def get_pruned_cfg(graph_in):
+    graph = graph_in.copy()
+    # collect edges to remove
+    to_remove = []
+    for u, v, kind in graph.edges(data="jumpkind"):
+        if kind == 'Ijk_Ret' or kind == 'Ijk_Call':
+            to_remove.append((u, v))
+
+    for edge in to_remove:
+        graph.remove_edge(edge[0], edge[1])
+    return graph
+
+
 def handleRecursion(region):
     region.recursions += 1
 
 
 def handleLoop(loop, region):
-    print("LOOP DETECTED")
     region.loops += 1
     region.instructionCount += 399
 
@@ -36,7 +51,8 @@ class MyAnalysis(angr.Analysis):
         self.option = option
         self.cfg = self.project.analyses.CFGFast()
         # detect loops
-        self.loops = list(nx.simple_cycles(self.get_pruned_cfg()))
+        self.per_function_cfg = get_pruned_cfg(self.cfg.graph)
+        self.loops = list(nx.simple_cycles(self.per_function_cfg))
 
         self.callgraph = self.kb.callgraph
         # detect recursion
@@ -56,9 +72,6 @@ class MyAnalysis(angr.Analysis):
         # initialize empty new region
         current_region = Region(func.name, func.addr)
 
-        # a loop may comprise several blocks
-        # we collect all blocks already handled here, so that we dont handle loops multiple times
-        loops_handled = set()
         for block in func.blocks:
             for inst in block.disassembly.insns:
                 # how to retrieve the disassembly memonic:
@@ -81,13 +94,16 @@ class MyAnalysis(angr.Analysis):
                         pass
                 pass
 
-            if cfg_node not in loops_handled:
-                for loop in self.loops:
-                    if cfg_node in loop:
-                        loops_handled.update(loop)
-                        handleLoop(loop, current_region)
-
         # end for each block
+
+        # handle loops
+
+        function_entry_cfg_node = self.cfg.get_node(func.addr)
+        for loop in self.loops:
+            # self.loops contain all loops from all functions
+            # we only handle loops in current function:
+            if networkx.algorithms.has_path(self.per_function_cfg, function_entry_cfg_node, loop[0]):
+                handleLoop(loop, current_region)
 
         # handle recursion
         # can detect recursion with self.callgraph_cycles
@@ -103,19 +119,6 @@ class MyAnalysis(angr.Analysis):
         openmp_regions = {addr: func for addr, func in self.kb.functions.items() if '._omp_fn.' in func.name}
         for addr, func in openmp_regions.items():
             self.result.append(self.analyze_function(func))
-
-    # prune the CFG to remove all "call" and "return" edges, as they will be handles in the callgraph in our analysis
-    def get_pruned_cfg(self):
-        graph = self.cfg.graph.copy()
-        # collect edges to remove
-        to_remove = []
-        for u, v, kind in graph.edges(data="jumpkind"):
-            if kind == 'Ijk_Ret' or kind == 'Ijk_Call':
-                to_remove.append((u, v))
-
-        for edge in to_remove:
-            graph.remove_edge(edge[0], edge[1])
-        return graph
 
 
 angr.analyses.register_analysis(MyAnalysis, 'MyAnalysis')  # register the class with angr's global analysis list
