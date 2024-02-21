@@ -52,15 +52,23 @@ class MyAnalysis(angr.Analysis):
                         current_region.include_other(target_call_region)
                     else:
                         # simple recursion
-                        # TODO implement
+                        # nothing to do, recursion is handled later
                         pass
                 pass
-            # handle recursion
-            # can detect recursion with self.callgraph_cycles
+
             for inst in block.disassembly.insns:
-                # how to retreive the disassebbly memonic:
+                # how to retrieve the disassembly memonic:
                 # print(inst.mnemonic)
                 current_region.instructionCount += 1
+
+        # end for each block
+
+        # handle recursion
+        # can detect recursion with self.callgraph_cycles
+        for cycle in self.callgraph_cycles:
+            if func.addr in cycle:
+                #print("RECURSION DETECTED")
+                current_region.recursions += 1
 
         self.function_analysis_result_cache[func] = current_region
         return current_region
