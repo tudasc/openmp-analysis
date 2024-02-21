@@ -283,6 +283,16 @@ class AsmAnalyzer:
         openmp_regions = {addr: func for addr, func in functions.items() if '._omp_fn.' in func.name}
 
         for addr, func in functions.items():
+            #Edges Style:
+            #Edge class 	Color 	Style
+            #Conditional True 	Green
+            #Conditional False 	Red
+            #Unconditional 	Blue
+            #Next 	Blue 	Dashed
+            #Call 	Black
+            #Return 	Gray
+            #Fake Return 	Gray 	Dotted
+            #Unknown 	Orange
             fname_to_use = outfile+"_"+func.name
             plot_cfg(cfg, fname_to_use, asminst=True, func_addr={func.addr: True}, remove_imports=True,remove_path_terminator=True)
 
@@ -290,7 +300,6 @@ class AsmAnalyzer:
             print(func.name)
             print("cyclomatic_complexity:")
             print(func.cyclomatic_complexity)
-            # plot_cfg(cfg, outfile, asminst=True, func_addr={func.addr: True}, remove_imports=True,remove_path_terminator=True)
 
         instructions, blocks = parse_asm_file(source)
 
