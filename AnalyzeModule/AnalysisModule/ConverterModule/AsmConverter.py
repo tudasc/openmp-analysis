@@ -4,6 +4,7 @@ import shutil
 from binaryornot.check import is_binary
 
 def checkLocation(src, dest, ignore_endings, ignore_folders):
+    #TODO Refactor: use OS.walk
         result = False
         for file in os.listdir(src):
             tmppath = src + '/' + file
