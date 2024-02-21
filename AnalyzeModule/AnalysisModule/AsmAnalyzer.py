@@ -5,7 +5,7 @@ import math
 import subprocess
 import angr
 import networkx as nx
-#from angrutils import *
+# from angrutils import *
 
 from AnalyzeModule.AnalysisModule.Region import Region
 
@@ -40,10 +40,20 @@ class MyAnalysis(angr.Analysis):
         current_region = Region(func.name, func.addr)
         for block in func.blocks:
             cfg_node = self.cfg.get_node(block.addr)
+            print(cfg_node)
             # successors
-            for s in self.cfg.get_successors_and_jumpkind(cfg_node):
-                # print(s)
-                # handle loop, if and call
+            for tgt, jmp_kind in self.cfg.get_successors_and_jumpkind(cfg_node):
+                # TODO handle loop, if
+                # handle call
+                if jmp_kind == 'Ijk_Call':
+                    tgt_func = self.kb.functions.get_by_addr(tgt.addr)
+                    if not tgt_func == func:
+                        target_call_region = self.analyze_function(tgt_func)
+                        current_region.include_other(target_call_region)
+                    else:
+                        # simple recursion
+                        # TODO implement
+                        pass
                 pass
             # handle recursion
             # can detect recursion with self.callgraph_cycles
@@ -247,7 +257,7 @@ class AsmAnalyzer:
             print(func.name)
             print("cyclomatic_complexity:")
             print(func.cyclomatic_complexity)
-            #plot_cfg(cfg, outfile, asminst=True, func_addr={func.addr: True}, remove_imports=True,remove_path_terminator=True)
+            # plot_cfg(cfg, outfile, asminst=True, func_addr={func.addr: True}, remove_imports=True,remove_path_terminator=True)
 
         instructions, blocks = parse_asm_file(source)
 
