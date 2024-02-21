@@ -5,6 +5,8 @@ import math
 import subprocess
 import angr
 import networkx as nx
+from angrutils import plot_cfg
+
 # from angrutils import *
 
 from AnalyzeModule.AnalysisModule.Region import Region
@@ -260,6 +262,10 @@ class AsmAnalyzer:
         cfg = proj.analyses.CFGFast()
         functions = dict(proj.kb.functions)
         openmp_regions = {addr: func for addr, func in functions.items() if '._omp_fn.' in func.name}
+
+        for addr, func in functions.items():
+            fname_to_use = outfile+"_"+func.name
+            plot_cfg(cfg, fname_to_use, asminst=True, func_addr={func.addr: True}, remove_imports=True,remove_path_terminator=True)
 
         for addr, func in openmp_regions.items():
             print(func.name)
