@@ -10,6 +10,7 @@ import angr
 import networkx
 import networkx as nx
 from angrutils import plot_cfg
+from networkx import NetworkXError
 
 # from angrutils import *
 
@@ -41,6 +42,7 @@ def handleRecursion(region):
 
 
 def handleLoop(loop, region):
+    # TODO try to get trip count
     region.loops += 1
     region.instructionCount += 399
 
@@ -49,7 +51,7 @@ class MyAnalysis(angr.Analysis):
 
     def __init__(self, option="some_option"):
         self.option = option
-        self.cfg = self.project.analyses.CFGFast()
+        self.cfg = self.project.analyses.CFGFast(normalize=True)
         # detect loops
         self.per_function_cfg = get_pruned_cfg(self.cfg.graph)
         self.loops = list(nx.simple_cycles(self.per_function_cfg))
@@ -65,6 +67,41 @@ class MyAnalysis(angr.Analysis):
         self.result = []
         self.run()
 
+    # calculate weight of each block (probalility of execution ignoring loops)
+    # with each branch having equal probability
+    def get_block_weight(self, loop_free_cfg, entry_node):
+        # only the graph of the given function
+        this_function_cfg = networkx.subgraph(loop_free_cfg,
+                                              {entry_node} | networkx.descendants(loop_free_cfg, entry_node))
+        assert len(list(nx.simple_cycles(this_function_cfg))) == 0  # no cycles
+
+        result = {node: 0.0 for node in this_function_cfg.nodes}
+        result[entry_node] = 1.0
+
+        to_visit = {entry_node}
+        to_add = set()  # to implement BFS
+        visited = set()
+
+        while len(to_visit) > 0:
+            node = to_visit.pop()
+            for pred in this_function_cfg.predecessors(node):
+                if pred not in visited:
+                    # not all incoming edges where visited
+                    to_add.add(node)  # avoid endless recursion
+                    continue
+            visited.add(node)
+            num_successors = len(this_function_cfg.succ[node])
+            for succ in this_function_cfg.succ[node]:
+                to_add.add(succ)
+                # propagate probalility
+                result[succ] += result[node] * (1.0 / num_successors)
+
+            if len(to_visit) == 0:
+                to_visit = to_add.copy()
+                to_add.clear()
+
+        return result
+
     def analyze_function(self, func):
         if func in self.function_analysis_result_cache:
             return self.function_analysis_result_cache[func]
@@ -72,13 +109,30 @@ class MyAnalysis(angr.Analysis):
         # initialize empty new region
         current_region = Region(func.name, func.addr)
 
+        # remove all back edges from cg to find out the branch nesting level of each block
+        loop_free_cfg = self.per_function_cfg.copy()
         for block in func.blocks:
+            cfg_node = self.cfg.get_node(block.addr)
+            # successors
+            for tgt, jmp_kind in self.cfg.get_successors_and_jumpkind(cfg_node):
+                if tgt.addr < cfg_node.addr:
+                    # backward jump
+                    try:
+                        loop_free_cfg.remove_edge(cfg_node, tgt)
+                    except NetworkXError:
+                        #  not in graph: nothing to do
+                        pass
+
+        block_weights = self.get_block_weight(loop_free_cfg, self.cfg.get_node(func.addr))
+
+        for block in func.blocks:
+            cfg_node = self.cfg.get_node(block.addr)
+            weight = block_weights[cfg_node]
             for inst in block.disassembly.insns:
                 # how to retrieve the disassembly memonic:
                 # print(inst.mnemonic)
-                current_region.instructionCount += 1
+                current_region.instructionCount += 1 * weight
 
-            cfg_node = self.cfg.get_node(block.addr)
             # successors
             for tgt, jmp_kind in self.cfg.get_successors_and_jumpkind(cfg_node):
                 # TODO handle if
@@ -87,6 +141,7 @@ class MyAnalysis(angr.Analysis):
                     tgt_func = self.kb.functions.get_by_addr(tgt.addr)
                     if not tgt_func == func:
                         target_call_region = self.analyze_function(tgt_func)
+                        # TODO also use block weight
                         current_region.include_other(target_call_region)
                     else:
                         # simple recursion
@@ -116,8 +171,8 @@ class MyAnalysis(angr.Analysis):
 
     def run(self):
         # self.kb has the KnowledgeBase object
-        openmp_regions = {addr: func for addr, func in self.kb.functions.items() if '._omp_fn.' in func.name}
-        for addr, func in openmp_regions.items():
+        openmp_regions = [func for addr, func in self.kb.functions.items() if '._omp_fn.' in func.name]
+        for func in openmp_regions:
             self.result.append(self.analyze_function(func))
 
 
@@ -289,7 +344,7 @@ class AsmAnalyzer:
     def __call__(self, source, outfile):
         proj = angr.Project(source, load_options={'auto_load_libs': False})
 
-        cfg = proj.analyses.CFGFast()
+        cfg = proj.analyses.CFGFast(normalize=True)
         functions = dict(proj.kb.functions)
         openmp_regions = {addr: func for addr, func in functions.items() if '._omp_fn.' in func.name}
 
