@@ -37,16 +37,6 @@ def get_pruned_cfg(graph_in):
     return graph
 
 
-def handleRecursion(region):
-    region.recursions += 1
-
-
-def handleLoop(loop, region):
-    # TODO try to get trip count
-    region.loops += 1
-    region.instructionCount += 399
-
-
 class OpenMPRegionAnalysis(angr.Analysis):
 
     def __init__(self, option="some_option"):
@@ -66,6 +56,15 @@ class OpenMPRegionAnalysis(angr.Analysis):
         # perform analysis
         self.result = []
         self.run()
+
+    def handleRecursion(self, region):
+        region.recursions += 1
+
+    def handleLoop(self, loop, region):
+        # TODO try to get trip count of loop
+
+        region.loops += 1
+        region.instructionCount += 399
 
     # calculate weight of each block (probalility of execution ignoring loops)
     # with each branch having equal probability
@@ -158,13 +157,13 @@ class OpenMPRegionAnalysis(angr.Analysis):
             # self.loops contain all loops from all functions
             # we only handle loops in current function:
             if networkx.algorithms.has_path(self.per_function_cfg, function_entry_cfg_node, loop[0]):
-                handleLoop(loop, current_region)
+                self.handleLoop(loop, current_region)
 
         # handle recursion
         # can detect recursion with self.callgraph_cycles
         for cycle in self.callgraph_cycles:
             if func.addr in cycle:
-                handleRecursion(current_region)
+                self.handleRecursion(current_region)
 
         self.function_analysis_result_cache[func] = current_region
         return current_region
