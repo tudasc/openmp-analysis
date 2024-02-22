@@ -47,7 +47,7 @@ def handleLoop(loop, region):
     region.instructionCount += 399
 
 
-class MyAnalysis(angr.Analysis):
+class OpenMPRegionAnalysis(angr.Analysis):
 
     def __init__(self, option="some_option"):
         self.option = option
@@ -176,7 +176,8 @@ class MyAnalysis(angr.Analysis):
             self.result.append(self.analyze_function(func))
 
 
-angr.analyses.register_analysis(MyAnalysis, 'MyAnalysis')  # register the class with angr's global analysis list
+angr.analyses.register_analysis(OpenMPRegionAnalysis,
+                                'OpenMPRegionAnalysis')  # register the class with angr's global analysis list
 
 
 # write all given regions into outfile
@@ -201,38 +202,28 @@ class AsmAnalyzer:
         pass
 
     # perform the analyses
-    def __call__(self, source, outfile):
+    def __call__(self, source, outfile, print_cfg=True):
         proj = angr.Project(source, load_options={'auto_load_libs': False})
 
-        cfg = proj.analyses.CFGFast(normalize=True)
-        functions = dict(proj.kb.functions)
-        openmp_regions = {addr: func for addr, func in functions.items() if '._omp_fn.' in func.name}
+        if print_cfg:
+            cfg = proj.analyses.CFGFast(normalize=True)
+            functions = dict(proj.kb.functions)
+            for addr, func in functions.items():
+                # Edges Style:
+                # Edge class 	Color 	Style
+                # Conditional True 	Green
+                # Conditional False 	Red
+                # Unconditional 	Blue
+                # Next 	Blue 	Dashed
+                # Call 	Black
+                # Return 	Gray
+                # Fake Return 	Gray 	Dotted
+                # Unknown 	Orange
+                fname_to_use = outfile + "_" + func.name
+                plot_cfg(cfg, fname_to_use, asminst=True, func_addr={func.addr: True}, remove_imports=True,
+                         remove_path_terminator=True)
 
-        for addr, func in functions.items():
-            # Edges Style:
-            # Edge class 	Color 	Style
-            # Conditional True 	Green
-            # Conditional False 	Red
-            # Unconditional 	Blue
-            # Next 	Blue 	Dashed
-            # Call 	Black
-            # Return 	Gray
-            # Fake Return 	Gray 	Dotted
-            # Unknown 	Orange
-            fname_to_use = outfile + "_" + func.name
-            plot_cfg(cfg, fname_to_use, asminst=True, func_addr={func.addr: True}, remove_imports=True,
-                     remove_path_terminator=True)
-
-        for addr, func in openmp_regions.items():
-            print(func.name)
-            print("cyclomatic_complexity:")
-            print(func.cyclomatic_complexity)
-
-        instructions, blocks = parse_asm_file(source)
-
-        regionsDic = dict()
-
-        parallel_regions = analysis = proj.analyses.MyAnalysis().result
+        parallel_regions = proj.analyses.OpenMPRegionAnalysis().result
 
         with open('%s' % outfile, 'w') as outfile:
             outfile.write(os.path.basename(source) + ': \n')
@@ -241,8 +232,5 @@ class AsmAnalyzer:
                 outfile.write('\tregions: \n')
                 writeRegions('\t', parallel_regions, outfile)
             outfile.write('\n')
-
-        # if(not keep_data):
-        #    shutil.rmtree(source)
 
         return 0
