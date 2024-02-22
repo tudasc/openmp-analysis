@@ -7,6 +7,9 @@ import subprocess
 from collections import OrderedDict
 import matplotlib.pyplot as plt
 
+
+import re
+
 import angr
 import networkx
 import networkx as nx
@@ -18,6 +21,9 @@ from networkx import NetworkXError
 from AnalyzeModule.AnalysisModule.Region import Region
 
 # from AnalysisModule.Region import Region
+
+
+hex_pattern = re.compile("0[xX][0-9a-fA-F]+")
 
 # bounds checking jump
 list_of_prefixes = ["bnd"]
@@ -100,7 +106,6 @@ class OpenMPRegionAnalysis(angr.Analysis):
         # try to get trip count of loop
 
         trip_count_guess = 'DEFAULT'
-        back_jumps = []
 
         guard_block = self.get_loop_guard(loop, this_function_cfg, entry_node)
 
@@ -111,8 +116,16 @@ class OpenMPRegionAnalysis(angr.Analysis):
                     print(cmp)
                     print(cmp.op_str)
                     print(type(cmp))
-                    # TODO found the loops cmp instruction
-                    # TODO check if it has a constant value
+                    # found the loops cmp instruction
+                    # check if it has a constant value
+                    operand_2 = cmp.op_str.split(',')[1].strip()
+                    print(operand_2)
+                    if hex_pattern.match(operand_2):  # is hexnum
+                        as_int = int(operand_2[2:], 16)
+                        print("Found Constant Trip count of loop: %d" % int(as_int))
+                        trip_count_guess = int(as_int)
+                        #TODO add check that other cmp part is incremented by 1 each loop trip
+
                     # TODO check if val is known to be based of num_threads
                     # pass
 
