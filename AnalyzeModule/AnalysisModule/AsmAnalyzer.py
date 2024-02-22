@@ -61,12 +61,41 @@ class OpenMPRegionAnalysis(angr.Analysis):
         region.recursions += 1
 
     def handleLoop(self, loop, region):
-        # TODO try to get trip count of loop
+        # try to get trip count of loop
+
+        trip_count_guess = 'DEFAULT'
+        back_jumps = []
+
+        for block in loop:
+            for tgt, jmp_kind in self.cfg.get_successors_and_jumpkind(block):
+                if tgt.addr < block.addr:
+                    back_jumps.append(block)
+
+        last_block_addr = sorted(back_jumps, key=lambda b: b.addr, reverse=True)[0]
+        print(last_block_addr)
+        print(loop)
+        last_block = self.project.factory.block(last_block_addr.addr)
+
+        # is some form of jump
+        if last_block.disassembly.insns[-1].mnemonic.startswith('j'):
+            pass
+            #if last_block.disassembly.insns[-2].mnemonic == "cmp":
+                #cmp = last_block.disassembly.insns[-2]
+                #print(cmp)
+                #print(cmp.op_str)
+                #print(type(cmp))
+                #TODO found the loops cmp instruction
+                #pass
+
+                #assert False
 
         region.loops += 1
-        region.instructionCount += 399
 
-    # calculate weight of each block (probalility of execution ignoring loops)
+        if trip_count_guess == 'DEFAULT':
+            trip_count_guess = 3  # TODO should be a parameter
+        return trip_count_guess
+
+    # calculate weight of each block (probability of execution ignoring loops)
     # with each branch having equal probability
     def get_block_weight(self, loop_free_cfg, entry_node):
         # only the graph of the given function
@@ -108,6 +137,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
         # initialize empty new region
         current_region = Region(func.name, func.addr)
 
+        function_entry_cfg_node = self.cfg.get_node(func.addr)
         # remove all back edges from cg to find out the branch nesting level of each block
         loop_free_cfg = self.per_function_cfg.copy()
         for block in func.blocks:
@@ -121,8 +151,19 @@ class OpenMPRegionAnalysis(angr.Analysis):
                     except NetworkXError:
                         #  not in graph: nothing to do
                         pass
+        # end for each block
 
-        block_weights = self.get_block_weight(loop_free_cfg, self.cfg.get_node(func.addr))
+        # instruction weight of each block
+        block_weights = self.get_block_weight(loop_free_cfg, function_entry_cfg_node)
+
+        # handle loops
+        for loop in self.loops:
+            # self.loops contain all loops from all functions
+            # we only handle loops in current function:
+            if networkx.algorithms.has_path(self.per_function_cfg, function_entry_cfg_node, loop[0]):
+                loop_trip_count_factor = self.handleLoop(loop, current_region)
+                for block in loop:
+                    block_weights[block] *= loop_trip_count_factor
 
         for block in func.blocks:
             cfg_node = self.cfg.get_node(block.addr)
@@ -147,17 +188,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
                         # nothing to do, recursion is handled later
                         pass
                 pass
-
         # end for each block
-
-        # handle loops
-
-        function_entry_cfg_node = self.cfg.get_node(func.addr)
-        for loop in self.loops:
-            # self.loops contain all loops from all functions
-            # we only handle loops in current function:
-            if networkx.algorithms.has_path(self.per_function_cfg, function_entry_cfg_node, loop[0]):
-                self.handleLoop(loop, current_region)
 
         # handle recursion
         # can detect recursion with self.callgraph_cycles
