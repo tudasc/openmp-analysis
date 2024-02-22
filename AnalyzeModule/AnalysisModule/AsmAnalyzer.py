@@ -73,11 +73,11 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
         return False
 
-    def get_loop_guard(self, loop, entry_node):
+    def get_loop_guard(self, loop, this_function_cfg, entry_node):
         # the loop guard block dominates all loop blocks
         print(entry_node)
         print(self.per_function_cfg)
-        im_dominators = networkx.immediate_dominators(self.per_function_cfg, entry_node)
+        im_dominators = networkx.immediate_dominators(this_function_cfg, entry_node)
 
         guards = []
         for candidate in loop:
@@ -98,13 +98,13 @@ class OpenMPRegionAnalysis(angr.Analysis):
         # not found
         return None
 
-    def handleLoop(self, loop, entry_node, region):
+    def handleLoop(self, loop, this_function_cfg, entry_node, region):
         # try to get trip count of loop
 
         trip_count_guess = 'DEFAULT'
         back_jumps = []
 
-        guard_block = self.get_loop_guard(loop, entry_node)
+        guard_block = self.get_loop_guard(loop, this_function_cfg, entry_node)
 
         if guard_block is not None:
             if guard_block.instructions >= 2:  # has another instruction
@@ -127,12 +127,8 @@ class OpenMPRegionAnalysis(angr.Analysis):
     # calculate weight of each block (probability of execution ignoring loops)
     # with each branch having equal probability
     def get_block_weight(self, loop_free_cfg, entry_node):
-        # only the graph of the given function
-        this_function_cfg = networkx.subgraph(loop_free_cfg,
-                                              {entry_node} | networkx.descendants(loop_free_cfg, entry_node))
-
-        assert len(list(nx.simple_cycles(this_function_cfg))) == 0  # no cycles
-        result = {node: 0.0 for node in this_function_cfg.nodes}
+        assert len(list(nx.simple_cycles(loop_free_cfg))) == 0  # no cycles
+        result = {node: 0.0 for node in loop_free_cfg.nodes}
         result[entry_node] = 1.0
 
         to_visit = {entry_node}
@@ -141,16 +137,16 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
         while len(to_visit) > 0:
             node = to_visit.pop()
-            for pred in this_function_cfg.predecessors(node):
+            for pred in loop_free_cfg.predecessors(node):
                 if pred not in visited:
                     # not all incoming edges where visited
                     to_add.add(node)  # avoid endless recursion
                     continue
             visited.add(node)
-            num_successors = len(this_function_cfg.succ[node])
-            for succ in this_function_cfg.succ[node]:
+            num_successors = len(loop_free_cfg.succ[node])
+            for succ in loop_free_cfg.succ[node]:
                 to_add.add(succ)
-                # propagate probalility
+                # propagate probability
                 result[succ] += result[node] * (1.0 / num_successors)
 
             if len(to_visit) == 0:
@@ -161,7 +157,6 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
     # remove all loop back edges from cfg
     # iterative algorithm: remove the edge that is included in most loops, but only if all nodes are still reachable, until no more loops remain
-
     def remove_back_edges(self, this_function_cfg, entry_node):
         result = this_function_cfg.copy()
         reachable = {entry_node} | networkx.descendants(this_function_cfg,
@@ -206,12 +201,10 @@ class OpenMPRegionAnalysis(angr.Analysis):
         this_function_cfg = networkx.subgraph(self.per_function_cfg,
                                               {function_entry_cfg_node} | networkx.descendants(self.per_function_cfg,
                                                                                                function_entry_cfg_node))
-        # remove all back edges from cfg to APPROXIMATE out the branch nesting level of each block
+        # remove all back edges from cfg to approximate out the branch nesting level of each block
         loop_free_cfg = self.remove_back_edges(this_function_cfg, function_entry_cfg_node)
         # end for each block
-        this_function_cfg = networkx.subgraph(self.per_function_cfg,
-                                              {function_entry_cfg_node} | networkx.descendants(self.per_function_cfg,
-                                                                                               function_entry_cfg_node))
+
         # instruction weight of each block
         block_weights = self.get_block_weight(loop_free_cfg, function_entry_cfg_node)
         print(block_weights)
@@ -219,9 +212,11 @@ class OpenMPRegionAnalysis(angr.Analysis):
         for loop in self.loops:
             # self.loops contain all loops from all functions
             # we only handle loops in current function:
-            if networkx.algorithms.has_path(self.per_function_cfg, function_entry_cfg_node, loop[0]):
-                loop_trip_count_factor = self.handleLoop(loop, function_entry_cfg_node, current_region)
+            if loop[0] in this_function_cfg.nodes:
+                loop_trip_count_factor = self.handleLoop(loop, this_function_cfg, function_entry_cfg_node,
+                                                         current_region)
                 for block in loop:
+                    print(block)
                     block_weights[block] *= loop_trip_count_factor
 
         for block in func.blocks:
