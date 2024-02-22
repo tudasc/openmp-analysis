@@ -75,8 +75,6 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
     def get_loop_guard(self, loop, this_function_cfg, entry_node):
         # the loop guard block dominates all loop blocks
-        print(entry_node)
-        print(self.per_function_cfg)
         im_dominators = networkx.immediate_dominators(this_function_cfg, entry_node)
 
         guards = []
@@ -140,9 +138,11 @@ class OpenMPRegionAnalysis(angr.Analysis):
             for pred in loop_free_cfg.predecessors(node):
                 if pred not in visited:
                     # not all incoming edges where visited
-                    to_add.add(node)  # avoid endless recursion
+                    to_add.add(node)  # need to re-visit in next BFS wave
                     continue
             visited.add(node)
+            if node in to_add:
+                to_add.remove(node)  # no endless recursion
             num_successors = len(loop_free_cfg.succ[node])
             for succ in loop_free_cfg.succ[node]:
                 to_add.add(succ)
@@ -207,7 +207,6 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
         # instruction weight of each block
         block_weights = self.get_block_weight(loop_free_cfg, function_entry_cfg_node)
-        print(block_weights)
         # handle loops
         for loop in self.loops:
             # self.loops contain all loops from all functions
@@ -216,7 +215,6 @@ class OpenMPRegionAnalysis(angr.Analysis):
                 loop_trip_count_factor = self.handleLoop(loop, this_function_cfg, function_entry_cfg_node,
                                                          current_region)
                 for block in loop:
-                    print(block)
                     block_weights[block] *= loop_trip_count_factor
 
         for block in func.blocks:
