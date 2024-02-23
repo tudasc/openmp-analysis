@@ -108,7 +108,8 @@ class OpenMPRegionAnalysis(angr.Analysis):
         return None
 
     # returns set of addresses of each instruction in the function that we know to be based on thread_num
-    def get_instructions_based_on_thread_num(self, REMOVE_PARAM, this_function_loop_free_cfg, entry_node):
+    def get_instructions_based_on_thread_num(self, this_function_loop_free_cfg):
+        assert len(list(nx.simple_cycles(this_function_loop_free_cfg))) == 0  # no cycles
         return_register = 'eax'  # may be architecture specific
         try:
             thread_num_func = self.kb.functions['omp_get_thread_num']
@@ -129,8 +130,8 @@ class OpenMPRegionAnalysis(angr.Analysis):
                         bb = self.project.factory.block(bb_addr.addr)
                         terminator = bb.disassembly.insns[-1]
                         assert terminator.mnemonic == "call"
-                        print(terminator)
-                        result.add(terminator)
+                        # print(terminator)
+                        result.add(terminator.address)
                         # move from there
                         tainted_registers = {return_register}
                         ret_blocks = list(this_function_loop_free_cfg.neighbors(bb_addr))
@@ -164,41 +165,47 @@ class OpenMPRegionAnalysis(angr.Analysis):
                         to_add[bb_addr] = tainted_registers.copy()
                     continue
             bb = self.project.factory.block(bb_addr.addr)
-            #TODO debugg here with debugger
             for inst in bb.disassembly.insns:
                 operands = inst.op_str.split(',')
                 if len(operands) == 2:
                     if operands[0].strip() in tainted_registers:
-                        if not inst.mnemonic == "cmp":
+                        # else: the result value is not "overwritten" in the sense, that the result does depend on input
+                        if not inst.mnemonic in ['cmp', 'add', 'imul']:
                             # register overwritten
                             # this is the conservative method anything written into this register marks it as not dependent on thread num anymore
                             # if e.g. another dependant value gets moved here, it could still be tainted
                             # but this requires more logic to e.g. distinguish it from "xor eax,eax" here the result is not dependant anymore
                             tainted_registers.remove(operands[0].strip())
+                        else:
+                            # print(inst)
+                            result.add(inst.address)
 
                     if operands[1].strip() in tainted_registers:
-                        print(inst)
-                        result.add(inst)
+                        # print(inst)
+                        result.add(inst.address)
                         if is_register(operands[0].strip()):
                             tainted_registers.add(operands[0].strip())
 
                 elif len(operands) == 1:
-                    if inst.mnemonic == 'call':
-                        if return_register in tainted_registers:
-                            tainted_registers.remove(return_register)
-                    if operands[0].strip() in tainted_registers:
-                        tainted_registers.remove(operands[0].strip())
-                        # remove, may be written (e.g. pop)
-                else:
-                    print(inst)
-                    if inst.mnemonic == "ret":
-                        continue  # end of this branch
-                    elif inst.mnemonic == "cdq":
-                        if 'edx' in tainted_registers:
-                            # overwritten
-                            tainted_registers.remove('edx')
+                    if operands[0] == "":
+                        # 0 operands
+
+                        if inst.mnemonic == "ret":
+                            continue  # end of this branch
+                        elif inst.mnemonic == "cdq":
+                            if 'edx' in tainted_registers:
+                                # overwritten
+                                tainted_registers.remove('edx')
+                        else:
+                            print(inst)
+                            assert False and "operation not supported"
                     else:
-                        assert False and "operation not supported"
+                        if inst.mnemonic == 'call':
+                            if return_register in tainted_registers:
+                                tainted_registers.remove(return_register)
+                        if operands[0].strip() in tainted_registers:
+                            tainted_registers.remove(operands[0].strip())
+                            # remove, may be written (e.g. pop)
 
             # end for insts
 
@@ -211,7 +218,6 @@ class OpenMPRegionAnalysis(angr.Analysis):
                     if len(tainted_registers) > 0:  # abort early if nothing more to do
                         to_add[succ] = tainted_registers.copy()
 
-        assert False
         return result
 
     def handleLoop(self, loop, this_function_cfg, this_function_loop_free_cfg, entry_node, region):
@@ -225,14 +231,14 @@ class OpenMPRegionAnalysis(angr.Analysis):
             if guard_block.instructions >= 2:  # has another instruction
                 if guard_block.disassembly.insns[-2].mnemonic == "cmp":
                     cmp = guard_block.disassembly.insns[-2]
-                    print(cmp)
-                    print(cmp.op_str)
-                    print(type(cmp))
+                    #print(cmp)
+                    #print(cmp.op_str)
+                    #print(type(cmp))
                     # found the loops cmp instruction
                     # check if it has a constant value
                     operand_1 = cmp.op_str.split(',')[0].strip()
                     operand_2 = cmp.op_str.split(',')[1].strip()
-                    print(operand_2)
+                    #print(operand_2)
                     as_int = None
                     try:
                         as_int = int(operand_2)  # decimal constant
@@ -249,7 +255,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
                                 bb = self.project.factory.block(bb_addr.addr)
                                 for inst in bb.disassembly.insns:
                                     if inst.mnemonic == 'add':
-                                        print(inst.op_str.split(',')[0].strip())
+                                        #print(inst.op_str.split(',')[0].strip())
                                         if inst.op_str.split(',')[0].strip() == operand_1:
                                             if inst.op_str.split(',')[1].strip() == '1':
                                                 # found increment by 1
@@ -258,17 +264,20 @@ class OpenMPRegionAnalysis(angr.Analysis):
                     # end if as_int not None
 
                     # check if val is known to be based of num_threads
-                    # TODO optimization: dont calculate the set several times for multiple loops
-                    if cmp in self.get_instructions_based_on_thread_num(this_function_cfg, this_function_loop_free_cfg,
-                                                                        entry_node):
+                    # TODO optimization: dont calculate this set several times for multiple loops inside a function
+                    if cmp.address in self.get_instructions_based_on_thread_num(this_function_loop_free_cfg):
                         assert trip_count_guess == 'DEFAULT'
+                        print("Found Trip count dependant on NUM_THREADS")
                         trip_count_guess = 'DEPEND_ON_THREAD_NUM'
                     # pass
 
         region.loops += 1
 
+        # TODO record the number of loops with tripcount guesses
         if trip_count_guess == 'DEFAULT':
             trip_count_guess = 3  # TODO should be a global parameter
+        if trip_count_guess == 'DEPEND_ON_THREAD_NUM':
+            trip_count_guess = 1
         return trip_count_guess
 
     # calculate weight of each block (probability of execution ignoring loops)
