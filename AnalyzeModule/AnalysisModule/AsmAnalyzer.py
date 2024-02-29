@@ -319,25 +319,23 @@ class OpenMPRegionAnalysis(angr.Analysis):
                     as_int = None
                     try:
                         as_int = int(operand_2)  # decimal constant
-
                     except ValueError:
                         pass
                     if hex_pattern.match(operand_2):  # is hexnum
                         as_int = int(operand_2[2:], 16)
                     if as_int is not None:
                         print("Found Constant Trip count of loop: %d" % int(as_int))
-                        # check if other opreand is register and incremented by 1 every loop trip
-                        if is_register(operand_1):
-                            for bb_addr in loop:
-                                bb = self.project.factory.block(bb_addr.addr)
-                                for inst in bb.disassembly.insns:
-                                    if inst.mnemonic == 'add':
-                                        # print(inst.op_str.split(',')[0].strip())
-                                        if inst.op_str.split(',')[0].strip() == operand_1:
-                                            if inst.op_str.split(',')[1].strip() == '1':
-                                                # found increment by 1
-                                                trip_count_guess = int(as_int)
-                                                break
+                        # check if other opreand is incremented by 1 every loop trip
+                        for bb_addr in loop:
+                            bb = self.project.factory.block(bb_addr.addr)
+                            for inst in bb.disassembly.insns:
+                                if inst.mnemonic == 'add':
+                                    # print(inst.op_str.split(',')[0].strip())
+                                    if inst.op_str.split(',')[0].strip() == operand_1:
+                                        if inst.op_str.split(',')[1].strip() == '1':
+                                            # found increment by 1
+                                            trip_count_guess = int(as_int)
+                                            break
                     # end if as_int not None
 
                     # check if val is known to be based of num_threads
