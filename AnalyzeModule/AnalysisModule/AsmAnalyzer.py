@@ -49,6 +49,31 @@ def is_register(reg):
                    'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
 
 
+# if one reg is only a lower part of another
+register_equivalent = [['rax', 'eax', 'ax'], ['rbx', 'ebx', 'bx'], ['rcx', 'ecx', 'cx'], ['rdx', 'edx', 'dx'],
+                       ['rsp', 'esp', 'sp'], ['rsb', 'esb', 'sb'], ['rdi', 'edi', 'di'], ['rsi', 'esi', 'si']]
+
+
+def add_tainted_register(set, reg):
+    assert is_register(reg)
+    set.add(reg)
+    for eq in register_equivalent:
+        if reg in eq:
+            for rr in eq:
+                set.add(rr)
+
+
+def remove_tainted_register(set, reg):
+    if reg in set:
+        set.remove(reg)
+
+    for eq in register_equivalent:
+        if reg in eq:
+            for rr in eq:
+                if rr in set:
+                    set.remove(rr)
+
+
 class OpenMPRegionAnalysis(angr.Analysis):
 
     def __init__(self, option="some_option"):
@@ -133,7 +158,8 @@ class OpenMPRegionAnalysis(angr.Analysis):
                         # print(terminator)
                         result.add(terminator.address)
                         # move from there
-                        tainted_registers = {return_register}
+                        tainted_registers = set()
+                        add_tainted_register(tainted_registers, return_register)
                         ret_blocks = list(this_function_loop_free_cfg.neighbors(bb_addr))
                         assert len(ret_blocks) == 1
                         ret_block = ret_blocks[0]
@@ -168,44 +194,60 @@ class OpenMPRegionAnalysis(angr.Analysis):
             for inst in bb.disassembly.insns:
                 operands = inst.op_str.split(',')
                 if len(operands) == 2:
-                    if operands[0].strip() in tainted_registers:
-                        # else: the result value is not "overwritten" in the sense, that the result does depend on input
-                        if not inst.mnemonic in ['cmp', 'add', 'imul']:
-                            # register overwritten
-                            # this is the conservative method anything written into this register marks it as not dependent on thread num anymore
-                            # if e.g. another dependant value gets moved here, it could still be tainted
-                            # but this requires more logic to e.g. distinguish it from "xor eax,eax" here the result is not dependant anymore
-                            tainted_registers.remove(operands[0].strip())
+                    if inst.mnemonic == "mov":
+                        if is_register(operands[0].strip()) and is_register(operands[1].strip()):
+                            if operands[1].strip() in tainted_registers:
+                                result.add(inst.address)
+                                add_tainted_register(tainted_registers, operands[0].strip())
+                            else:
+                                # is overridden
+                                remove_tainted_register(tainted_registers, operands[0].strip())
                         else:
-                            # print(inst)
-                            result.add(inst.address)
-
-                    if operands[1].strip() in tainted_registers:
+                            # may be overridden
+                            # will also work if it is not a register or not in set at all
+                            remove_tainted_register(tainted_registers, operands[0].strip())
+                    elif inst.mnemonic in ['add', 'imul']:
+                        # the result value is not "overwritten" in the sense, that the result does depend on input
                         # print(inst)
-                        result.add(inst.address)
-                        if is_register(operands[0].strip()):
-                            tainted_registers.add(operands[0].strip())
+                        if operands[0].strip() in tainted_registers:
+                            result.add(inst.address)
+                        if operands[1].strip() in tainted_registers:
+                            result.add(inst.address)
+                            add_tainted_register(tainted_registers, operands[0].strip())
+                    elif inst.mnemonic in ['cmp']:
+                        # readonly
+                        if operands[0].strip() in tainted_registers:
+                            result.add(inst.address)
+                        if operands[1].strip() in tainted_registers:
+                            result.add(inst.address)
+                    else:
+                        # register overwritten
+                        # this is the conservative method anything written into this register marks it as not dependent on thread num anymore
+                        # there may be more possiblitiies of instruction that dont break taintedness
+                        remove_tainted_register(tainted_registers, operands[0].strip())
+                        # even more conservative:
+                        remove_tainted_register(tainted_registers, operands[1].strip())
+
 
                 elif len(operands) == 1:
                     if operands[0] == "":
                         # 0 operands
-
                         if inst.mnemonic == "ret":
                             continue  # end of this branch
                         elif inst.mnemonic == "cdq":
                             if 'edx' in tainted_registers:
                                 # overwritten
-                                tainted_registers.remove('edx')
+                                remove_tainted_register(tainted_registers, 'edx')
                         else:
                             print(inst)
                             assert False and "operation not supported"
                     else:
                         if inst.mnemonic == 'call':
                             if return_register in tainted_registers:
-                                tainted_registers.remove(return_register)
+                                remove_tainted_register(tainted_registers, return_register)
                         if operands[0].strip() in tainted_registers:
-                            tainted_registers.remove(operands[0].strip())
-                            # remove, may be written (e.g. pop)
+                            remove_tainted_register(tainted_registers, operands[0].strip())
+                            # remove, as it may be written (e.g. pop)
 
             # end for insts
 
@@ -220,6 +262,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
         return result
 
+
     def handleLoop(self, loop, this_function_cfg, this_function_loop_free_cfg, entry_node, region):
         # try to get trip count of loop
 
@@ -231,14 +274,14 @@ class OpenMPRegionAnalysis(angr.Analysis):
             if guard_block.instructions >= 2:  # has another instruction
                 if guard_block.disassembly.insns[-2].mnemonic == "cmp":
                     cmp = guard_block.disassembly.insns[-2]
-                    #print(cmp)
-                    #print(cmp.op_str)
-                    #print(type(cmp))
+                    # print(cmp)
+                    # print(cmp.op_str)
+                    # print(type(cmp))
                     # found the loops cmp instruction
                     # check if it has a constant value
                     operand_1 = cmp.op_str.split(',')[0].strip()
                     operand_2 = cmp.op_str.split(',')[1].strip()
-                    #print(operand_2)
+                    # print(operand_2)
                     as_int = None
                     try:
                         as_int = int(operand_2)  # decimal constant
@@ -255,7 +298,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
                                 bb = self.project.factory.block(bb_addr.addr)
                                 for inst in bb.disassembly.insns:
                                     if inst.mnemonic == 'add':
-                                        #print(inst.op_str.split(',')[0].strip())
+                                        # print(inst.op_str.split(',')[0].strip())
                                         if inst.op_str.split(',')[0].strip() == operand_1:
                                             if inst.op_str.split(',')[1].strip() == '1':
                                                 # found increment by 1
@@ -265,6 +308,12 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
                     # check if val is known to be based of num_threads
                     # TODO optimization: dont calculate this set several times for multiple loops inside a function
+                    for addr in self.get_instructions_based_on_thread_num(this_function_loop_free_cfg):
+                        print(hex(addr))
+                    print(cmp)
+                    print(cmp.address)
+                    print(hex(cmp.address))
+
                     if cmp.address in self.get_instructions_based_on_thread_num(this_function_loop_free_cfg):
                         assert trip_count_guess == 'DEFAULT'
                         print("Found Trip count dependant on NUM_THREADS")
@@ -279,6 +328,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
         if trip_count_guess == 'DEPEND_ON_THREAD_NUM':
             trip_count_guess = 1
         return trip_count_guess
+
 
     # calculate weight of each block (probability of execution ignoring loops)
     # with each branch having equal probability
@@ -312,6 +362,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
                 to_add.clear()
 
         return result
+
 
     # remove all loop back edges from cfg
     # iterative algorithm: remove the edge that is included in most loops, but only if all nodes are still reachable, until no more loops remain
@@ -347,6 +398,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
             # check for other loops
             loops = list(networkx.simple_cycles(result))
         return result
+
 
     def analyze_function(self, func):
         if func in self.function_analysis_result_cache:
@@ -408,6 +460,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
         self.function_analysis_result_cache[func] = current_region
         return current_region
+
 
     def run(self):
         # self.kb has the KnowledgeBase object
