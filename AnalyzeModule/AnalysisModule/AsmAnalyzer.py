@@ -219,10 +219,10 @@ class OpenMPRegionAnalysis(angr.Analysis):
                         if operands[1].strip() in tainted_registers:
                             result.add(inst.address)
                             add_tainted_register(tainted_registers, operands[0].strip())
-                    elif inst.mnemonic =="lea":
+                    elif inst.mnemonic == "lea":
                         # if it follows a specific format: [rax + rcx] - 2 registers added
-                        format = re.compile("^\[[a-z]{3} \+ [a-z]{3}\]$")
-                        if format.match(operands[1].strip()):
+                        pattern = re.compile(r"^\[[a-z]{3} \+ [a-z]{3}\]$")
+                        if pattern.match(operands[1].strip()):
                             # the two registers used:
                             r1 = operands[1].strip()[1:4]
                             r2 = operands[1].strip()[7:10]
@@ -270,6 +270,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
                             # remove, as it may be written (e.g. pop)
 
             # end for insts
+            visited.add(bb_addr)
 
             for succ in this_function_loop_free_cfg.successors(bb_addr):
                 if succ in to_visit:
@@ -281,7 +282,6 @@ class OpenMPRegionAnalysis(angr.Analysis):
                         to_add[succ] = tainted_registers.copy()
 
         return result
-
 
     def handleLoop(self, loop, this_function_cfg, this_function_loop_free_cfg, entry_node, region):
         # try to get trip count of loop
@@ -343,7 +343,6 @@ class OpenMPRegionAnalysis(angr.Analysis):
             trip_count_guess = 1
         return trip_count_guess
 
-
     # calculate weight of each block (probability of execution ignoring loops)
     # with each branch having equal probability
     def get_block_weight(self, loop_free_cfg, entry_node):
@@ -376,7 +375,6 @@ class OpenMPRegionAnalysis(angr.Analysis):
                 to_add.clear()
 
         return result
-
 
     # remove all loop back edges from cfg
     # iterative algorithm: remove the edge that is included in most loops, but only if all nodes are still reachable, until no more loops remain
@@ -412,7 +410,6 @@ class OpenMPRegionAnalysis(angr.Analysis):
             # check for other loops
             loops = list(networkx.simple_cycles(result))
         return result
-
 
     def analyze_function(self, func):
         if func in self.function_analysis_result_cache:
@@ -474,7 +471,6 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
         self.function_analysis_result_cache[func] = current_region
         return current_region
-
 
     def run(self):
         # self.kb has the KnowledgeBase object
