@@ -187,8 +187,8 @@ class OpenMPRegionAnalysis(angr.Analysis):
                     incoming_visited = False
                     break
             if not incoming_visited:
-                if not len(to_visit) == 0 and len(to_add) == 0:  # avoid endless recursion
-                    # TODO there exist other possibilities of endless recursion
+                if not (len(to_visit) == 0 and len(to_add) == 0):  # avoid endless recursion
+                    # TODO there may exist other possibilities of endless recursion
                     # to be visitied later
                     if bb_addr in to_add:
                         to_add[bb_addr] = tainted_registers.intersection(to_add[bb_addr])
@@ -237,9 +237,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
                             remove_tainted_register(tainted_registers, operands[0])
                     elif inst.mnemonic in ['cmp']:
                         # readonly
-                        if operands[0] in tainted_registers:
-                            result.add(inst.address)
-                        if operands[1] in tainted_registers:
+                        if operands[0] in tainted_registers or operands[1] in tainted_registers:
                             result.add(inst.address)
                     else:
                         # register overwritten
