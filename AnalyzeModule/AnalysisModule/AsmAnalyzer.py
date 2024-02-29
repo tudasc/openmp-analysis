@@ -198,55 +198,56 @@ class OpenMPRegionAnalysis(angr.Analysis):
             bb = self.project.factory.block(bb_addr.addr)
             for inst in bb.disassembly.insns:
                 operands = inst.op_str.split(',')
+                operands = [o.strip() for o in operands]
                 if len(operands) == 2:
                     if inst.mnemonic == "mov":
-                        if is_register(operands[0].strip()) and is_register(operands[1].strip()):
-                            if operands[1].strip() in tainted_registers:
+                        if is_register(operands[0]) and is_register(operands[1]):
+                            if operands[1] in tainted_registers:
                                 result.add(inst.address)
-                                add_tainted_register(tainted_registers, operands[0].strip())
+                                add_tainted_register(tainted_registers, operands[0])
                             else:
                                 # is overridden
-                                remove_tainted_register(tainted_registers, operands[0].strip())
+                                remove_tainted_register(tainted_registers, operands[0])
                         else:
                             # may be overridden
                             # will also work if it is not a register or not in set at all
-                            remove_tainted_register(tainted_registers, operands[0].strip())
+                            remove_tainted_register(tainted_registers, operands[0])
                     elif inst.mnemonic in ['add', 'imul']:
                         # the result value is not "overwritten" in the sense, that the result does depend on input
                         # print(inst)
-                        if operands[0].strip() in tainted_registers:
+                        if operands[0] in tainted_registers:
                             result.add(inst.address)
-                        if operands[1].strip() in tainted_registers:
+                        if operands[1] in tainted_registers:
                             result.add(inst.address)
-                            add_tainted_register(tainted_registers, operands[0].strip())
+                            add_tainted_register(tainted_registers, operands[0])
                     elif inst.mnemonic == "lea":
                         # if it follows a specific format: [rax + rcx] - 2 registers added
                         pattern = re.compile(r"^\[[a-z]{3} \+ [a-z]{3}\]$")
-                        if pattern.match(operands[1].strip()):
+                        if pattern.match(operands[1]):
                             # the two registers used:
-                            r1 = operands[1].strip()[1:4]
-                            r2 = operands[1].strip()[7:10]
+                            r1 = operands[1][1:4]
+                            r2 = operands[1][7:10]
                             if r1 in tainted_registers or r2 in tainted_registers:
                                 # depends on tainted value
                                 result.add(inst.address)
-                                add_tainted_register(tainted_registers, operands[0].strip())
+                                add_tainted_register(tainted_registers, operands[0])
                             else:
-                                remove_tainted_register(tainted_registers, operands[0].strip())
+                                remove_tainted_register(tainted_registers, operands[0])
                         else:
-                            remove_tainted_register(tainted_registers, operands[0].strip())
+                            remove_tainted_register(tainted_registers, operands[0])
                     elif inst.mnemonic in ['cmp']:
                         # readonly
-                        if operands[0].strip() in tainted_registers:
+                        if operands[0] in tainted_registers:
                             result.add(inst.address)
-                        if operands[1].strip() in tainted_registers:
+                        if operands[1] in tainted_registers:
                             result.add(inst.address)
                     else:
                         # register overwritten
                         # this is the conservative method anything written into this register marks it as not dependent on thread num anymore
                         # there may be more possiblitiies of instruction that dont break taintedness
-                        remove_tainted_register(tainted_registers, operands[0].strip())
+                        remove_tainted_register(tainted_registers, operands[0])
                         # even more conservative:
-                        remove_tainted_register(tainted_registers, operands[1].strip())
+                        remove_tainted_register(tainted_registers, operands[1])
 
 
                 elif len(operands) == 1:
@@ -265,8 +266,16 @@ class OpenMPRegionAnalysis(angr.Analysis):
                         if inst.mnemonic == 'call':
                             if return_register in tainted_registers:
                                 remove_tainted_register(tainted_registers, return_register)
-                        if operands[0].strip() in tainted_registers:
-                            remove_tainted_register(tainted_registers, operands[0].strip())
+                        elif inst.mnemonic in ['div', 'idiv']:
+                            if 'eax' in tainted_registers or operands[0] in tainted_registers:
+                                result.add(inst.address)
+                                add_tainted_register(tainted_registers, "eax")
+                                add_tainted_register(tainted_registers, "edx")
+                            else:
+                                remove_tainted_register(tainted_registers, "eax")
+                                remove_tainted_register(tainted_registers, "edx")
+                        elif operands[0] in tainted_registers:
+                            remove_tainted_register(tainted_registers, operands[0])
                             # remove, as it may be written (e.g. pop)
 
             # end for insts
