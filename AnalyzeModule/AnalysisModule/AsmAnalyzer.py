@@ -214,6 +214,21 @@ class OpenMPRegionAnalysis(angr.Analysis):
                         if operands[1].strip() in tainted_registers:
                             result.add(inst.address)
                             add_tainted_register(tainted_registers, operands[0].strip())
+                    elif inst.mnemonic =="lea":
+                        # if it follows a specific format: [rax + rcx] - 2 registers added
+                        format = re.compile("^\[[a-z]{3} \+ [a-z]{3}\]$")
+                        if format.match(operands[1].strip()):
+                            # the two registers used:
+                            r1 = operands[1].strip()[1:4]
+                            r2 = operands[1].strip()[7:10]
+                            if r1 in tainted_registers or r2 in tainted_registers:
+                                # depends on tainted value
+                                result.add(inst.address)
+                                add_tainted_register(tainted_registers, operands[0].strip())
+                            else:
+                                remove_tainted_register(tainted_registers, operands[0].strip())
+                        else:
+                            remove_tainted_register(tainted_registers, operands[0].strip())
                     elif inst.mnemonic in ['cmp']:
                         # readonly
                         if operands[0].strip() in tainted_registers:
@@ -308,12 +323,6 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
                     # check if val is known to be based of num_threads
                     # TODO optimization: dont calculate this set several times for multiple loops inside a function
-                    for addr in self.get_instructions_based_on_thread_num(this_function_loop_free_cfg):
-                        print(hex(addr))
-                    print(cmp)
-                    print(cmp.address)
-                    print(hex(cmp.address))
-
                     if cmp.address in self.get_instructions_based_on_thread_num(this_function_loop_free_cfg):
                         assert trip_count_guess == 'DEFAULT'
                         print("Found Trip count dependant on NUM_THREADS")
