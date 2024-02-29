@@ -394,12 +394,12 @@ class OpenMPRegionAnalysis(angr.Analysis):
     # iterative algorithm: remove the edge that is included in most loops, but only if all nodes are still reachable, until no more loops remain
     def remove_back_edges(self, this_function_cfg, entry_node):
         result = this_function_cfg.copy()
-        reachable = {entry_node} | networkx.descendants(this_function_cfg,
+        reachable = {entry_node} | networkx.descendants(result,
                                                         entry_node)
-        assert reachable == set(this_function_cfg.nodes)
+        assert reachable == set(result.nodes)
 
-        # TODO: assert that number of loops decreases each step?
         loops = list(networkx.simple_cycles(result))
+        num_loops = len(loops)
         while len(loops) > 0:
             removal_candidates = {}
             # collect removal candidates
@@ -408,14 +408,18 @@ class OpenMPRegionAnalysis(angr.Analysis):
                     if (loop[i], loop[i + 1]) not in removal_candidates:
                         removal_candidates[(loop[i], loop[i + 1])] = 0
                     removal_candidates[(loop[i], loop[i + 1])] += 1
-            # sort by number of cycles in each node
+                # wrap-around
+                if (loop[-1], loop[0]) not in removal_candidates:
+                    removal_candidates[(loop[-1], loop[0])] = 0
+                removal_candidates[(loop[-1], loop[0])] += 1
+            # sort by number of cycles the edge is part of
             removal_candidates = dict(sorted(removal_candidates.items(), key=lambda item: item[1]))
             # try removal
             for edge, _ in removal_candidates.items():
                 result.remove_edge(edge[0], edge[1])
-                reachable = {entry_node} | networkx.descendants(this_function_cfg,
+                reachable = {entry_node} | networkx.descendants(result,
                                                                 entry_node)
-                if not reachable == set(this_function_cfg.nodes):
+                if not reachable == set(result.nodes):
                     # removal partitioned graph
                     result.add_edge(edge[0], edge[1])
                 else:
@@ -423,6 +427,12 @@ class OpenMPRegionAnalysis(angr.Analysis):
                     break
             # check for other loops
             loops = list(networkx.simple_cycles(result))
+            assert len(loops) < num_loops
+            num_loops = len(loops)
+
+        reachable = {entry_node} | networkx.descendants(result, entry_node)
+        assert reachable == set(result.nodes)
+        assert len(list(networkx.simple_cycles(result))) == 0
         return result
 
     def analyze_function(self, func):
