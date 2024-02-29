@@ -131,15 +131,18 @@ class OpenMPRegionAnalysis(angr.Analysis):
             if is_entry or is_exit:
                 guards.append(candidate)
 
-        conditionals = []
-        for guard_addr in guards:
-            guard = self.project.factory.block(guard_addr.addr)
-            # check if it is a conditional jmp
-            if guard.disassembly.insns[-1].mnemonic.startswith('j') and guard.disassembly.insns[-1].mnemonic != 'jmp':
-                conditionals.append(guard)
+        leave_loop = []
+        for guard in guards:
+            goes_outside=False
+            for succ in this_function_cfg.successors(guard):
+                if succ not in loop:
+                    goes_outside=True
+                    break
+            if goes_outside:
+                leave_loop.append(guard)
 
-        if len(conditionals) == 1:
-            return conditionals[0]
+        if len(leave_loop) == 1:
+            return leave_loop[0]
 
         # not found
         return None
@@ -302,9 +305,10 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
         trip_count_guess = 'DEFAULT'
 
-        guard_block = self.get_loop_guard(loop, this_function_cfg, entry_node)
+        guard_block_addr = self.get_loop_guard(loop, this_function_cfg, entry_node)
 
-        if guard_block is not None:
+        if guard_block_addr is not None:
+            guard_block = self.project.factory.block(guard_block_addr.addr)
             if guard_block.instructions >= 2:  # has another instruction
                 if guard_block.disassembly.insns[-2].mnemonic == "cmp":
                     cmp = guard_block.disassembly.insns[-2]
