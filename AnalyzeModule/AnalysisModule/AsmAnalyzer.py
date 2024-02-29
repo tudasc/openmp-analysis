@@ -121,18 +121,25 @@ class OpenMPRegionAnalysis(angr.Analysis):
         guards = []
         for candidate in loop:
             is_entry = True
+            is_exit = True
 
             for bbb in loop:
                 if self.dominates(candidate, bbb, im_dominators):
                     is_entry = False
-                    break
-            if is_entry:
+                if self.dominates(bbb, candidate, im_dominators):
+                    is_exit = False
+            if is_entry or is_exit:
                 guards.append(candidate)
-        if len(guards) == 1:
-            guard = self.project.factory.block(guards[0].addr)
+
+        conditionals = []
+        for guard_addr in guards:
+            guard = self.project.factory.block(guard_addr.addr)
             # check if it is a conditional jmp
             if guard.disassembly.insns[-1].mnemonic.startswith('j') and guard.disassembly.insns[-1].mnemonic != 'jmp':
-                return guard
+                conditionals.append(guard)
+
+        if len(conditionals) == 1:
+            return conditionals[0]
 
         # not found
         return None
