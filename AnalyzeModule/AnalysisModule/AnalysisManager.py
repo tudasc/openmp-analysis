@@ -15,7 +15,7 @@ def analyze_asm_repo_single_arg(args):
 #    print('Analyzation of ' + args[0] + ' threw an Exception!')
 
 
-def analyze_asm_repo(repo_name, repo_base_path, resultdir, ignore_endings, ignore_folders, refresh_repos, keep_data):
+def analyze_asm_repo(repo_name, repo_base_path, resultdir, ignore_endings, ignore_folders, refresh_repos, keep_data,print_analyzed_files=False):
 
     outdir = os.path.join(resultdir, repo_name)
     os.makedirs(outdir, exist_ok=True)
@@ -32,11 +32,13 @@ def analyze_asm_repo(repo_name, repo_base_path, resultdir, ignore_endings, ignor
             # TODO respect ignore dirs
 
             if analyze:
-                print("analyze file: %s" % this_file)
+                if print_analyzed_files:
+                    print("analyze file: %s" % this_file)
                 analyzer = AsmAnalyzer()
                 analyzer(this_file, os.path.join(outdir,name))
             else:
-                print("skip file %s"%this_file)
+                if print_analyzed_files:
+                    print("skip file %s"%this_file)
 
     else:
         pass
