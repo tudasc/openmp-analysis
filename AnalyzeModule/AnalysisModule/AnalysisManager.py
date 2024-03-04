@@ -15,8 +15,8 @@ def analyze_asm_repo_single_arg(args):
 #    print('Analyzation of ' + args[0] + ' threw an Exception!')
 
 
-def analyze_asm_repo(repo_name, repo_base_path, resultdir, ignore_endings, ignore_folders, refresh_repos, keep_data,print_analyzed_files=False):
-
+def analyze_asm_repo(repo_name, repo_base_path, resultdir, ignore_endings, ignore_folders, refresh_repos, keep_data,
+                     print_analyzed_files=False):
     outdir = os.path.join(resultdir, repo_name)
     os.makedirs(outdir, exist_ok=True)
 
@@ -24,7 +24,7 @@ def analyze_asm_repo(repo_name, repo_base_path, resultdir, ignore_endings, ignor
         for name in files:
             this_file = os.path.join(root, name)
             analyze = is_binary(this_file)
-            #for suffix in ignore_endings:
+            # for suffix in ignore_endings:
             #    if this_file.endswith(suffix):
             #        analyze = False
             # TODO respect ignore dirs
@@ -33,11 +33,11 @@ def analyze_asm_repo(repo_name, repo_base_path, resultdir, ignore_endings, ignor
                 if print_analyzed_files:
                     print("analyze file: %s" % this_file)
                 analyzer = AsmAnalyzer()
-                outname = name+".csv"
-                analyzer(this_file, os.path.join(outdir,outname))
+                outname = name + ".csv"
+                analyzer(this_file, os.path.join(outdir, outname))
             else:
                 if print_analyzed_files:
-                    print("skip file %s"%this_file)
+                    print("skip file %s" % this_file)
 
     else:
         pass
@@ -60,7 +60,7 @@ class AnalysisManager:
         self._keep_data = keep_data
 
     # perform the analyses
-    def __call__(self):
+    def __call__(self, use_parallel_processing=True):
         with mp.Pool() as pool:
             param_list = [(repo_dir, self._datadir, self._resultdir, self._ignore_endings, self._ignore_folders,
                            self._refresh_repos,
@@ -68,11 +68,13 @@ class AnalysisManager:
                           repo_dir in
                           os.listdir(self._datadir)]
 
-            #serial processing
-            result = [analyze_asm_repo_single_arg(p) for p in param_list]
+            if use_parallel_processing:
+                # parallel processing
+                list(tqdm.tqdm(pool.imap_unordered(analyze_asm_repo_single_arg, param_list), total=len(param_list)))
+            else:
+                # serial processing
+                [analyze_asm_repo_single_arg(p) for p in param_list]
 
-            # parallel processing
-            #list(tqdm.tqdm(pool.imap_unordered(analyze_asm_repo_single_arg, param_list), total=len(param_list)))
-            print('Analysation finished.')
+            print('Analysis finished.')
 
         return 0
