@@ -12,20 +12,28 @@ import re
 import angr
 import networkx
 import networkx as nx
+import pandas as pd
+import numpy as np
 from angrutils import plot_cfg
 from networkx import NetworkXError
 
-# from angrutils import *
-
-from AnalyzeModule.AnalysisModule.Region import Region
-
-# from AnalysisModule.Region import Region
-
-
 hex_pattern = re.compile("0[xX][0-9a-fA-F]+")
 
-# bounds checking jump
-list_of_prefixes = ["bnd"]
+col_names = ["name", "addr", "instructions_flat", "instructions_weighted", "default_tripcount_loops",
+             "known_tripcount_loops", "thread_dependant_trip_count_loops", "recursions"]
+
+DEFAULT_TRIP_COUNT_GUESS = 3
+
+
+def get_region(name, start_addr):
+    return pd.Series(data=[name, start_addr] + [0 for i in range(len(col_names) - 2)], index=col_names)
+
+
+def combine_region(region_a, region_b, weight=1):
+    cols_to_combine = [c for c in col_names if c not in ["name", "addr", "instructions_weighted"]]
+    region_a[cols_to_combine] += region_b[cols_to_combine]
+    region_a["instructions_weighted"] += region_b["instructions_weighted"] * weight
+    return region_a
 
 
 # prune the CFG to remove all "call" and "return" edges, as they will be handles in the callgraph in our analysis
@@ -96,11 +104,11 @@ class OpenMPRegionAnalysis(angr.Analysis):
         self.function_analysis_result_cache = {}
 
         # perform analysis
-        self.result = []
+        self.result = pd.DataFrame(columns=col_names)
         self.run()
 
     def handleRecursion(self, region):
-        region.recursions += 1
+        region['recursions'] += 1
 
     def dominates(self, u, v, im_dominators):
         prev_node = v
@@ -133,10 +141,10 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
         leave_loop = []
         for guard in guards:
-            goes_outside=False
+            goes_outside = False
             for succ in this_function_cfg.successors(guard):
                 if succ not in loop:
-                    goes_outside=True
+                    goes_outside = True
                     break
             if goes_outside:
                 leave_loop.append(guard)
@@ -350,13 +358,14 @@ class OpenMPRegionAnalysis(angr.Analysis):
                         trip_count_guess = 'DEPEND_ON_THREAD_NUM'
                     # pass
 
-        region.loops += 1
-
-        # TODO record the number of loops with tripcount guesses
         if trip_count_guess == 'DEFAULT':
-            trip_count_guess = 3  # TODO should be a global parameter
-        if trip_count_guess == 'DEPEND_ON_THREAD_NUM':
+            region['default_tripcount_loops'] += 1
+            trip_count_guess = DEFAULT_TRIP_COUNT_GUESS
+        elif trip_count_guess == 'DEPEND_ON_THREAD_NUM':
             trip_count_guess = 1
+            region['thread_dependant_trip_count_loops'] += 1
+        else:
+            region['known_tripcount_loops'] += 1
         return trip_count_guess
 
     # calculate weight of each block (probability of execution ignoring loops)
@@ -442,7 +451,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
             return self.function_analysis_result_cache[func]
 
         # initialize empty new region
-        current_region = Region(func.name, func.addr)
+        current_region = get_region(func.name, func.addr)
 
         function_entry_cfg_node = self.cfg.get_node(func.addr)
         this_function_cfg = networkx.subgraph(self.per_function_cfg,
@@ -471,7 +480,8 @@ class OpenMPRegionAnalysis(angr.Analysis):
             for inst in block.disassembly.insns:
                 # how to retrieve the disassembly memonic:
                 # print(inst.mnemonic)
-                current_region.instructionCount += 1 * weight
+                current_region["instructions_weighted"] += 1 * weight
+                current_region["instructions_flat"] += 1 * weight
 
             # successors
             for tgt, jmp_kind in self.cfg.get_successors_and_jumpkind(cfg_node):
@@ -480,8 +490,8 @@ class OpenMPRegionAnalysis(angr.Analysis):
                     tgt_func = self.kb.functions.get_by_addr(tgt.addr)
                     if not tgt_func == func:
                         target_call_region = self.analyze_function(tgt_func)
-                        # TODO also use block weight?
-                        current_region.include_other(target_call_region)
+                        #TODO use block weight?
+                        combine_region(current_region,target_call_region)
                     else:
                         # simple recursion
                         # nothing to do, recursion is handled later
@@ -502,7 +512,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
         # self.kb has the KnowledgeBase object
         openmp_regions = [func for addr, func in self.kb.functions.items() if '._omp_fn.' in func.name]
         for func in openmp_regions:
-            self.result.append(self.analyze_function(func))
+            self.result.loc[0] = self.analyze_function(func)  # append
 
 
 angr.analyses.register_analysis(OpenMPRegionAnalysis,
@@ -513,14 +523,14 @@ angr.analyses.register_analysis(OpenMPRegionAnalysis,
 def writeRegions(basePrint, regions, outfile):
     for region in regions:
         outfile.write(basePrint + '\t____________________________\n')
-        outfile.write(basePrint + '\t| name: ' + region.name + '\n')
-        outfile.write(basePrint + '\t| start: line ' + str(region.start + 1) + '\n')
-        outfile.write(basePrint + '\t| end: line ' + str(region.end) + '\n')
-        outfile.write(basePrint + '\t| instructions: ' + str(region.instructionCount) + '\n')
-        outfile.write(basePrint + '\t| recursions: ' + str(region.recursions) + '\n')
-        outfile.write(basePrint + '\t| loops: ' + str(region.loops) + '\n')
-        outfile.write(basePrint + '\t| conditionals: ' + str(region.conditionals) + '\n')
-        outfile.write(basePrint + '\t| links: ' + str(region.links) + '\n')
+        outfile.write(basePrint + '\t| name: ' + region['name'] + '\n')
+        outfile.write(basePrint + '\t| start: line ' + str(region['start'] + 1) + '\n')
+        outfile.write(basePrint + '\t| end: line ' + str(region['end']) + '\n')
+        outfile.write(basePrint + '\t| instructions: ' + str(region['instructionCount']) + '\n')
+        outfile.write(basePrint + '\t| recursions: ' + str(region['recursions']) + '\n')
+        outfile.write(basePrint + '\t| loops: ' + str(region['loops']) + '\n')
+        outfile.write(basePrint + '\t| conditionals: ' + str(region['conditionals']) + '\n')
+        outfile.write(basePrint + '\t| links: ' + str(region['links']) + '\n')
         outfile.write(basePrint + '\t‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾\n')
 
 
@@ -553,13 +563,8 @@ class AsmAnalyzer:
                          remove_path_terminator=True)
 
         parallel_regions = proj.analyses.OpenMPRegionAnalysis().result
+        assert isinstance(parallel_regions, pd.DataFrame)
 
-        with open('%s' % outfile, 'w') as outfile:
-            outfile.write(os.path.basename(source) + ': \n')
-            outfile.write('\tamount of parallel regions: ' + str(len(parallel_regions)) + '\n')
-            if (len(parallel_regions) > 0):
-                outfile.write('\tregions: \n')
-                writeRegions('\t', parallel_regions, outfile)
-            outfile.write('\n')
+        parallel_regions.to_csv(outfile)
 
         return 0
