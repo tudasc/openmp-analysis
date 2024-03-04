@@ -20,8 +20,6 @@ def analyze_asm_repo(repo_name, repo_base_path, resultdir, ignore_endings, ignor
     outdir = os.path.join(resultdir, repo_name)
     os.makedirs(outdir, exist_ok=True)
 
-    print("analyze repo: " + repo_name)
-
     for root, dirs, files in os.walk(os.path.join(repo_base_path, repo_name)):
         for name in files:
             this_file = os.path.join(root, name)

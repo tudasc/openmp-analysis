@@ -336,13 +336,12 @@ class OpenMPRegionAnalysis(angr.Analysis):
                     if hex_pattern.match(operand_2):  # is hexnum
                         as_int = int(operand_2[2:], 16)
                     if as_int is not None:
-                        print("Found Constant Trip count of loop: %d" % int(as_int))
+                        # print("Found Constant Trip count of loop: %d" % int(as_int))
                         # check if other opreand is incremented by 1 every loop trip
                         for bb_addr in loop:
                             bb = self.project.factory.block(bb_addr.addr)
                             for inst in bb.disassembly.insns:
                                 if inst.mnemonic == 'add':
-                                    # print(inst.op_str.split(',')[0].strip())
                                     if inst.op_str.split(',')[0].strip() == operand_1:
                                         if inst.op_str.split(',')[1].strip() == '1':
                                             # found increment by 1
@@ -354,7 +353,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
                     # TODO optimization: dont calculate this set several times for multiple loops inside a function
                     if cmp.address in self.get_instructions_based_on_thread_num(this_function_loop_free_cfg):
                         assert trip_count_guess == 'DEFAULT'
-                        print("Found Trip count dependant on NUM_THREADS")
+                        # print("Found Trip count dependant on NUM_THREADS")
                         trip_count_guess = 'DEPEND_ON_THREAD_NUM'
                     # pass
 
@@ -517,22 +516,6 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
 angr.analyses.register_analysis(OpenMPRegionAnalysis,
                                 'OpenMPRegionAnalysis')  # register the class with angr's global analysis list
-
-
-# write all given regions into outfile
-def writeRegions(basePrint, regions, outfile):
-    for region in regions:
-        outfile.write(basePrint + '\t____________________________\n')
-        outfile.write(basePrint + '\t| name: ' + region['name'] + '\n')
-        outfile.write(basePrint + '\t| start: line ' + str(region['start'] + 1) + '\n')
-        outfile.write(basePrint + '\t| end: line ' + str(region['end']) + '\n')
-        outfile.write(basePrint + '\t| instructions: ' + str(region['instructionCount']) + '\n')
-        outfile.write(basePrint + '\t| recursions: ' + str(region['recursions']) + '\n')
-        outfile.write(basePrint + '\t| loops: ' + str(region['loops']) + '\n')
-        outfile.write(basePrint + '\t| conditionals: ' + str(region['conditionals']) + '\n')
-        outfile.write(basePrint + '\t| links: ' + str(region['links']) + '\n')
-        outfile.write(basePrint + '\t‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾\n')
-
 
 class AsmAnalyzer:
     __slots__ = ()
