@@ -257,23 +257,30 @@ class OpenMPRegionAnalysis(angr.Analysis):
     def handleLoop(self, loop, this_function_cfg, this_function_loop_free_cfg, entry_node, region):
         # try to get trip count of loop
 
+        trip_count_guess = self.get_tripcount_guess(entry_node, loop, this_function_cfg, this_function_loop_free_cfg)
+
+        if trip_count_guess == 'DEFAULT':
+            region['default_tripcount_loops'] += 1
+            trip_count_guess = DEFAULT_TRIP_COUNT_GUESS
+        elif trip_count_guess == 'DEPEND_ON_THREAD_NUM':
+            trip_count_guess = 1
+            region['thread_dependant_trip_count_loops'] += 1
+        else:
+            region['known_tripcount_loops'] += 1
+        return trip_count_guess
+
+    def get_tripcount_guess(self, entry_node, loop, this_function_cfg, this_function_loop_free_cfg):
         trip_count_guess = 'DEFAULT'
-
         guard_block_addr = get_loop_guard(loop, this_function_cfg, entry_node)
-
         if guard_block_addr is not None:
             guard_block = self.project.factory.block(guard_block_addr.addr)
             if guard_block.instructions >= 2:  # has another instruction
                 if guard_block.disassembly.insns[-2].mnemonic == "cmp":
                     cmp = guard_block.disassembly.insns[-2]
-                    # print(cmp)
-                    # print(cmp.op_str)
-                    # print(type(cmp))
                     # found the loops cmp instruction
                     # check if it has a constant value
                     operand_1 = cmp.op_str.split(',')[0].strip()
                     operand_2 = cmp.op_str.split(',')[1].strip()
-                    # print(operand_2)
                     as_int = None
                     try:
                         as_int = int(operand_2)  # decimal constant
@@ -302,15 +309,6 @@ class OpenMPRegionAnalysis(angr.Analysis):
                         # print("Found Trip count dependant on NUM_THREADS")
                         trip_count_guess = 'DEPEND_ON_THREAD_NUM'
                     # pass
-
-        if trip_count_guess == 'DEFAULT':
-            region['default_tripcount_loops'] += 1
-            trip_count_guess = DEFAULT_TRIP_COUNT_GUESS
-        elif trip_count_guess == 'DEPEND_ON_THREAD_NUM':
-            trip_count_guess = 1
-            region['thread_dependant_trip_count_loops'] += 1
-        else:
-            region['known_tripcount_loops'] += 1
         return trip_count_guess
 
     def analyze_function(self, func):
