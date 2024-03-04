@@ -1,6 +1,19 @@
 import networkx
 import networkx as nx
 
+# prune the CFG to remove all "call" and "return" edges, as they will be handles in the callgraph in our analysis
+# returns pruned copy
+def get_pruned_cfg(graph_in):
+    graph = graph_in.copy()
+    # collect edges to remove
+    to_remove = []
+    for u, v, kind in graph.edges(data="jumpkind"):
+        if kind == 'Ijk_Ret' or kind == 'Ijk_Call':
+            to_remove.append((u, v))
+
+    for edge in to_remove:
+        graph.remove_edge(edge[0], edge[1])
+    return graph
 
 def dominates(u, v, im_dominators):
     prev_node = v
