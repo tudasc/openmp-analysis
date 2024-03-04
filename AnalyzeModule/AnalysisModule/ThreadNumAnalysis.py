@@ -39,8 +39,12 @@ def remove_tainted_register(set, reg):
                     set.remove(rr)
 
 
+result_cache={}
 # returns set of addresses of each instruction in the function that we know to be based on thread_num
-def get_instructions_based_on_thread_num(project,full_cfg, this_function_loop_free_cfg):
+def get_instructions_based_on_thread_num(project,full_cfg, this_function_loop_free_cfg,cache_key=None):
+    if cache_key is not None and cache_key in result_cache:
+        return result_cache[cache_key]
+
     assert len(list(nx.simple_cycles(this_function_loop_free_cfg))) == 0  # no cycles
     return_register = 'eax'  # may be architecture specific
     try:
@@ -190,4 +194,6 @@ def get_instructions_based_on_thread_num(project,full_cfg, this_function_loop_fr
                 if len(tainted_registers) > 0:  # abort early if nothing more to do
                     to_add[succ] = tainted_registers.copy()
 
+    if cache_key is not None:
+        result_cache[cache_key] = result
     return result

@@ -100,8 +100,8 @@ class OpenMPRegionAnalysis(angr.Analysis):
                     # end if as_int not None
 
                     # check if val is known to be based of num_threads
-                    # TODO optimization: dont calculate this set several times for multiple loops inside a function
-                    if cmp.address in get_instructions_based_on_thread_num(self.project, self.cfg,this_function_loop_free_cfg):
+                    if cmp.address in get_instructions_based_on_thread_num(self.project, self.cfg,
+                                                                           this_function_loop_free_cfg, entry_node):
                         assert trip_count_guess == 'DEFAULT'
                         # print("Found Trip count dependant on NUM_THREADS")
                         trip_count_guess = 'DEPEND_ON_THREAD_NUM'
