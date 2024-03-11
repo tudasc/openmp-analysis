@@ -163,6 +163,8 @@ def get_instructions_based_on_thread_num(project,full_cfg, this_function_loop_fr
                         if 'edx' in tainted_registers:
                             # overwritten
                             remove_tainted_register(tainted_registers, 'edx')
+                    elif inst.mnemonic == "nop":
+                        pass # nothing to do for no-op
                     else:
                         print(inst)
                         assert False and "operation not supported"
