@@ -34,7 +34,7 @@ def analyze_asm_repo(repo_name, repo_base_path, resultdir, ignore_endings, ignor
                     print("analyze file: %s" % this_file)
                 analyzer = AsmAnalyzer()
                 outname = name + ".csv"
-                analyzer(this_file, os.path.join(outdir, outname))
+                analyzer(this_file, os.path.join(outdir, outname),print_cfg)
             else:
                 if print_analyzed_files:
                     print("skip file %s" % this_file)

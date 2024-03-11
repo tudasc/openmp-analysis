@@ -9,8 +9,8 @@ class Parser:
         parser = argparse.ArgumentParser()
         parser.add_argument("--refresh", action='store_true',
                                   help='Re evaluate all repositories and re-fresh their analysis results')
-        parser.add_argument("--keep_data", action='store_true',
-                                  help='Keep all data even, when finished working on')
+        parser.add_argument("--print_cfg", action='store_true',
+                                  help='prints a CFG for each binary analyzed')
         parser.add_argument("--data_dir", help="Location where the repositories are lying", required = True)
         parser.add_argument("--results_dir", help="Location where the results should be stored", required = True)
         parser.add_argument("--ignore_endings", default=None, action='store', help='Path to the file containing the file endings to be ignored.')
