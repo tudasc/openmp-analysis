@@ -159,12 +159,16 @@ def get_instructions_based_on_thread_num(project,full_cfg, this_function_loop_fr
                     # 0 operands
                     if inst.mnemonic == "ret":
                         continue  # end of this branch
-                    elif inst.mnemonic == "cdq":
+                    elif inst.mnemonic in ["cwd","cdq","cqo"]:
                         if 'edx' in tainted_registers:
                             # overwritten
                             remove_tainted_register(tainted_registers, 'edx')
-                    elif inst.mnemonic == "nop":
-                        pass # nothing to do for no-op
+                    elif inst.mnemonic in ["cbw","cwde","cdqe"]:
+                        # nothing to do: byte to word keeps the current "taint status" if a part of eax is tainted, all of it is tainted
+                        pass
+                    elif inst.mnemonic in ["nop","endbr64"]:
+                        # nothing to do, these instructions don't do something harmful to the registers
+                        pass
                     else:
                         print(inst)
                         assert False and "operation not supported"
