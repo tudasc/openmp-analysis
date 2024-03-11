@@ -2,10 +2,12 @@ import os
 import tqdm
 import multiprocessing as mp
 from AnalysisModule.AsmAnalyzer import AsmAnalyzer
-from binaryornot.check import is_binary
+import magic
 
 # for debugging
 CONTINUE_ON_EXCEPTION = False
+
+PRINT_ANALYZED_FILES = True
 
 
 def analyze_asm_repo_single_arg(args):
@@ -29,13 +31,18 @@ def analyze_asm_repo(repo_name, repo_base_path, resultdir, ignore_endings, ignor
         dirs[:] = [d for d in dirs if d not in ignore_folders]
         for name in files:
             this_file = os.path.join(root, name)
-            analyze = is_binary(this_file)
+            file_type = magic.from_file(this_file, mime=True)
+            # only analyze binary or object files
+            analyze = file_type.startswith('application/x-executable') or file_type.startswith('application/x-object') or file_type.startswith('application/x-sharedlib')
+            print(this_file)
+            print(file_type)
+
             for suffix in ignore_endings:
                 if this_file.endswith(suffix):
                     analyze = False
 
             if analyze:
-                if print_analyzed_files:
+                if PRINT_ANALYZED_FILES:
                     print("analyze file: %s" % this_file)
                 analyzer = AsmAnalyzer()
                 outname = name + ".csv"
