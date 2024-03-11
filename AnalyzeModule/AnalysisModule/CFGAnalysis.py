@@ -16,9 +16,10 @@ def get_pruned_cfg(graph_in):
     return graph
 
 def dominates(u, v, im_dominators):
+    #im_dominators holds the parent in the domtree
     prev_node = v
     cur_node = im_dominators[v]
-    while prev_node != cur_node:
+    while prev_node != cur_node: # not reached the top
         if cur_node == u:
             return True  # found u in domtree
         # go one lvl up in the domtree
@@ -31,6 +32,7 @@ def dominates(u, v, im_dominators):
 def get_loop_guard(loop, this_function_cfg, entry_node):
     # the loop guard block dominates all loop blocks
     im_dominators = networkx.immediate_dominators(this_function_cfg, entry_node)
+    assert im_dominators[entry_node]==entry_node
 
     guards = []
     for candidate in loop:
