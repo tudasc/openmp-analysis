@@ -29,7 +29,15 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
     def __init__(self, default_trip_count_guess):
         self.default_trip_count_guess = default_trip_count_guess
+
+        self.result = pd.DataFrame(columns=col_names)
+
         self.cfg = self.project.analyses.CFGFast(normalize=True)
+        self.openmp_regions = [func for addr, func in self.kb.functions.items() if '._omp_fn.' in func.name]
+
+        if len(self.openmp_regions) == 0:
+            return
+        # abort early, if no openmp was found, no need to perform further graph analyses
         # detect loops
         self.per_function_cfg = get_pruned_cfg(self.cfg.graph)
         self.loops = list(nx.simple_cycles(self.per_function_cfg))
@@ -42,7 +50,6 @@ class OpenMPRegionAnalysis(angr.Analysis):
         self.function_analysis_result_cache = {}
 
         # perform analysis
-        self.result = pd.DataFrame(columns=col_names)
         self.run()
 
     def handleRecursion(self, region):
@@ -168,9 +175,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
         return current_region
 
     def run(self):
-        # self.kb has the KnowledgeBase object
-        openmp_regions = [func for addr, func in self.kb.functions.items() if '._omp_fn.' in func.name]
-        for func in openmp_regions:
+        for func in self.openmp_regions:
             self.result.loc[0] = self.analyze_function(func)  # append
 
 
@@ -185,7 +190,7 @@ class AsmAnalyzer:
         pass
 
     # perform the analyses
-    def __call__(self, source, outfile, default_trip_count_guess,print_cfg):
+    def __call__(self, source, outfile, default_trip_count_guess, print_cfg):
         proj = angr.Project(source, load_options={'auto_load_libs': False})
 
         if print_cfg:
@@ -208,9 +213,9 @@ class AsmAnalyzer:
 
         parallel_regions = proj.analyses.OpenMPRegionAnalysis(default_trip_count_guess).result
         assert isinstance(parallel_regions, pd.DataFrame)
-        parallel_regions['DEFAULT_TRIPCOUNT_GUESS']= default_trip_count_guess
+        parallel_regions['DEFAULT_TRIPCOUNT_GUESS'] = default_trip_count_guess
 
-
-        parallel_regions.to_csv(outfile)
+        if len(parallel_regions) > 0:
+            parallel_regions.to_csv(outfile)
 
         return 0
