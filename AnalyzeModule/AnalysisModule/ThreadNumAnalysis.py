@@ -39,9 +39,11 @@ def remove_tainted_register(set, reg):
                     set.remove(rr)
 
 
-result_cache={}
+result_cache = {}
+
+
 # returns set of addresses of each instruction in the function that we know to be based on thread_num
-def get_instructions_based_on_thread_num(project,full_cfg, this_function_loop_free_cfg,cache_key=None):
+def get_instructions_based_on_thread_num(project, full_cfg, this_function_loop_free_cfg, cache_key=None):
     if cache_key is not None and cache_key in result_cache:
         return result_cache[cache_key]
 
@@ -90,11 +92,18 @@ def get_instructions_based_on_thread_num(project,full_cfg, this_function_loop_fr
         incoming_visited = True
         for inc in this_function_loop_free_cfg.predecessors(bb_addr):
             if inc not in visited:
-                incoming_visited = False
-                break
+                # counting only incoming nodes still reachable
+                incoming_is_reachable = False
+                will_visit = [k for k in to_visit] + [k for k in to_add]
+                for node in will_visit:
+                    if node == inc or nx.has_path(this_function_loop_free_cfg, node, inc):
+                        incoming_is_reachable = True
+                        break
+                if incoming_is_reachable:
+                    incoming_visited = False
+                    break
         if not incoming_visited:
             if not (len(to_visit) == 0 and len(to_add) == 0):  # avoid endless recursion
-                # TODO there may exist other possibilities of endless recursion
                 # to be visitied later
                 if bb_addr in to_add:
                     to_add[bb_addr] = tainted_registers.intersection(to_add[bb_addr])
@@ -159,14 +168,14 @@ def get_instructions_based_on_thread_num(project,full_cfg, this_function_loop_fr
                     # 0 operands
                     if inst.mnemonic == "ret":
                         continue  # end of this branch
-                    elif inst.mnemonic in ["cwd","cdq","cqo"]:
+                    elif inst.mnemonic in ["cwd", "cdq", "cqo"]:
                         if 'edx' in tainted_registers:
                             # overwritten
                             remove_tainted_register(tainted_registers, 'edx')
-                    elif inst.mnemonic in ["cbw","cwde","cdqe"]:
+                    elif inst.mnemonic in ["cbw", "cwde", "cdqe"]:
                         # nothing to do: byte to word keeps the current "taint status" if a part of eax is tainted, all of it is tainted
                         pass
-                    elif inst.mnemonic in ["nop","endbr64"]:
+                    elif inst.mnemonic in ["nop", "endbr64"]:
                         # nothing to do, these instructions don't do something harmful to the registers
                         pass
                     else:
