@@ -7,12 +7,10 @@ from binaryornot.check import is_binary
 
 
 def analyze_asm_repo_single_arg(args):
-    # try:
-    analyze_asm_repo(args[0], args[1], args[2], args[3], args[4], args[5], args[6])
-
-
-# except Exception:
-#    print('Analyzation of ' + args[0] + ' threw an Exception!')
+    try:
+        analyze_asm_repo(args[0], args[1], args[2], args[3], args[4], args[5], args[6])
+    except Exception:
+        print('Analysis of ' + args[0] + ' threw an Exception!')
 
 
 def analyze_asm_repo(repo_name, repo_base_path, resultdir, ignore_endings, ignore_folders, refresh_repos, keep_data,
@@ -21,13 +19,15 @@ def analyze_asm_repo(repo_name, repo_base_path, resultdir, ignore_endings, ignor
     os.makedirs(outdir, exist_ok=True)
 
     for root, dirs, files in os.walk(os.path.join(repo_base_path, repo_name)):
+        #https://stackoverflow.com/questions/19859840/excluding-directories-in-os-walk
+        #modifying dirs in-place will prune the (subsequent) files and directories visited by os.walk
+        dirs[:] = [d for d in dirs if d not in ignore_folders]
         for name in files:
             this_file = os.path.join(root, name)
             analyze = is_binary(this_file)
-            # for suffix in ignore_endings:
-            #    if this_file.endswith(suffix):
-            #        analyze = False
-            # TODO respect ignore dirs
+            for suffix in ignore_endings:
+                if this_file.endswith(suffix):
+                    analyze = False
 
             if analyze:
                 if print_analyzed_files:
