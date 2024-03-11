@@ -113,13 +113,13 @@ def remove_back_edges(this_function_cfg, entry_node):
         # collect removal candidates
         for loop in loops:
             for i in range(len(loop) - 1):
+                # wrap-around edge
+                if (loop[-1], loop[0]) not in removal_candidates:
+                    removal_candidates[(loop[-1], loop[0])] = 0
+                removal_candidates[(loop[-1], loop[0])] += 1
                 if (loop[i], loop[i + 1]) not in removal_candidates:
                     removal_candidates[(loop[i], loop[i + 1])] = 0
                 removal_candidates[(loop[i], loop[i + 1])] += 1
-            # wrap-around
-            if (loop[-1], loop[0]) not in removal_candidates:
-                removal_candidates[(loop[-1], loop[0])] = 0
-            removal_candidates[(loop[-1], loop[0])] += 1
         # sort by number of cycles the edge is part of
         removal_candidates = dict(sorted(removal_candidates.items(), key=lambda item: item[1]))
         # try removal
