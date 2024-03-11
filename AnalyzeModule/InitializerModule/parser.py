@@ -6,7 +6,7 @@ class Parser:
 
     @staticmethod
     def parseInput():
-        parser = argparse.ArgumentParser()
+        parser = argparse.ArgumentParser(description="Analyzes all repositories (directories) in --data_dir. collect all results to --results_dir.")
         parser.add_argument("--refresh", action='store_true',
                                   help='Re evaluate all repositories and re-fresh their analysis results')
         parser.add_argument("--print_cfg", action='store_true',
@@ -15,5 +15,7 @@ class Parser:
         parser.add_argument("--results_dir", help="Location where the results should be stored", required = True)
         parser.add_argument("--ignore_endings", default=None, action='store', help='Path to the file containing the file endings to be ignored.')
         parser.add_argument("--ignore_folders", default=None, action="store", help="Path to the file containing the folder names to be ignored.")
+        parser.add_argument("--tripcount_guess", default=3,type=int, action='store',
+                            help='Guess of tripcount for loops (use --refresh to re-analyze all repos when chainging the guess)')
 
         return parser.parse_args()

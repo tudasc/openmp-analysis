@@ -21,7 +21,7 @@ def main():
     else:
         ignore_folders = []
 
-    usageAnalyzer = AnalysisManager(args.data_dir, args.results_dir, ignore_endings, ignore_folders, args.refresh, args.print_cfg)
+    usageAnalyzer = AnalysisManager(args.data_dir, args.results_dir, ignore_endings, ignore_folders, args.refresh, args.print_cfg,args.tripcount_guess)
 
     usageAnalyzer()
 

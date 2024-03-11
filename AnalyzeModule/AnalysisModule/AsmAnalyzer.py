@@ -14,9 +14,6 @@ hex_pattern = re.compile("0[xX][0-9a-fA-F]+")
 col_names = ["name", "addr", "instructions_flat", "instructions_weighted", "default_tripcount_loops",
              "known_tripcount_loops", "thread_dependant_trip_count_loops", "recursions"]
 
-DEFAULT_TRIP_COUNT_GUESS = 3
-
-
 def get_region(name, start_addr):
     return pd.Series(data=[name, start_addr] + [0 for i in range(len(col_names) - 2)], index=col_names)
 
@@ -30,8 +27,8 @@ def combine_region(region_a, region_b, weight=1):
 
 class OpenMPRegionAnalysis(angr.Analysis):
 
-    def __init__(self, option="some_option"):
-        self.option = option
+    def __init__(self, default_trip_count_guess):
+        self.default_trip_count_guess = default_trip_count_guess
         self.cfg = self.project.analyses.CFGFast(normalize=True)
         # detect loops
         self.per_function_cfg = get_pruned_cfg(self.cfg.graph)
@@ -58,7 +55,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
         if trip_count_guess == 'DEFAULT':
             region['default_tripcount_loops'] += 1
-            trip_count_guess = DEFAULT_TRIP_COUNT_GUESS
+            trip_count_guess = self.default_trip_count_guess
         elif trip_count_guess == 'DEPEND_ON_THREAD_NUM':
             trip_count_guess = 1
             region['thread_dependant_trip_count_loops'] += 1
@@ -188,7 +185,7 @@ class AsmAnalyzer:
         pass
 
     # perform the analyses
-    def __call__(self, source, outfile, print_cfg=True):
+    def __call__(self, source, outfile, default_trip_count_guess,print_cfg):
         proj = angr.Project(source, load_options={'auto_load_libs': False})
 
         if print_cfg:
@@ -209,8 +206,10 @@ class AsmAnalyzer:
                 plot_cfg(cfg, fname_to_use, asminst=True, func_addr={func.addr: True}, remove_imports=True,
                          remove_path_terminator=True)
 
-        parallel_regions = proj.analyses.OpenMPRegionAnalysis().result
+        parallel_regions = proj.analyses.OpenMPRegionAnalysis(default_trip_count_guess).result
         assert isinstance(parallel_regions, pd.DataFrame)
+        parallel_regions['DEFAULT_TRIPCOUNT_GUESS']= default_trip_count_guess
+
 
         parallel_regions.to_csv(outfile)
 
