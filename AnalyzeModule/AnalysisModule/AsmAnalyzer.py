@@ -36,7 +36,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
         self.result = pd.DataFrame(columns=col_names)
         if PRINT_ANALYSIS_PROGRES:
-            print("Collect CFG")
+            print("collect CFG")
         self.cfg = self.project.analyses.CFGFast(normalize=True, show_progressbar=PRINT_ANALYSIS_PROGRES)
         self.openmp_regions = [func for addr, func in self.kb.functions.items() if '._omp_fn.' in func.name]
 
@@ -45,11 +45,11 @@ class OpenMPRegionAnalysis(angr.Analysis):
         # abort early, if no openmp was found, no need to perform further graph analyses
         # detect loops
         if PRINT_ANALYSIS_PROGRES:
-            print("Prune CFG")
+            print("prune CFG")
         self.per_function_cfg = get_pruned_cfg(self.cfg.graph)
 
         if PRINT_ANALYSIS_PROGRES:
-            print("dcollect callgraph")
+            print("collect callgraph")
         self.callgraph = self.kb.callgraph
         if PRINT_ANALYSIS_PROGRES:
             print("detect recursions")
@@ -125,11 +125,14 @@ class OpenMPRegionAnalysis(angr.Analysis):
     def analyze_function(self, func):
         if func in self.function_analysis_result_cache:
             return self.function_analysis_result_cache[func]
+        if PRINT_ANALYSIS_PROGRES:
+            print("analyze function: " + func.name)
 
         # initialize empty new region
         current_region = get_region(func.name, func.addr)
 
         function_entry_cfg_node = self.cfg.get_node(func.addr)
+        assert function_entry_cfg_node is not None
         this_function_cfg = networkx.subgraph(self.per_function_cfg,
                                               {function_entry_cfg_node} | networkx.descendants(self.per_function_cfg,
                                                                                                function_entry_cfg_node))
@@ -150,7 +153,11 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
         for block in func.blocks:
             cfg_node = self.cfg.get_node(block.addr)
-            weight = block_weights[cfg_node]
+            if cfg_node not in this_function_cfg.nodes:
+                weight = 1
+                # TODO why does this happen?
+            else:
+                weight = block_weights[cfg_node]
             for inst in block.disassembly.insns:
                 # how to retrieve the disassembly memonic:
                 # print(inst.mnemonic)
@@ -185,8 +192,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
     def run(self):
         for func in self.openmp_regions:
             if PRINT_ANALYSIS_PROGRES:
-                print("analyze function :" + func.name)
-            self.result.loc[0] = self.analyze_function(func)  # append
+                self.result.loc[0] = self.analyze_function(func)  # append
 
 
 angr.analyses.register_analysis(OpenMPRegionAnalysis,
