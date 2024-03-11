@@ -35,7 +35,8 @@ class OpenMPRegionAnalysis(angr.Analysis):
         self.default_trip_count_guess = default_trip_count_guess
 
         self.result = pd.DataFrame(columns=col_names)
-
+        if PRINT_ANALYSIS_PROGRES:
+            print("Collect CFG")
         self.cfg = self.project.analyses.CFGFast(normalize=True, show_progressbar=PRINT_ANALYSIS_PROGRES)
         self.openmp_regions = [func for addr, func in self.kb.functions.items() if '._omp_fn.' in func.name]
 
@@ -47,6 +48,8 @@ class OpenMPRegionAnalysis(angr.Analysis):
             print("Prune CFG")
         self.per_function_cfg = get_pruned_cfg(self.cfg.graph)
 
+        if PRINT_ANALYSIS_PROGRES:
+            print("dcollect callgraph")
         self.callgraph = self.kb.callgraph
         if PRINT_ANALYSIS_PROGRES:
             print("detect recursions")
@@ -181,6 +184,8 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
     def run(self):
         for func in self.openmp_regions:
+            if PRINT_ANALYSIS_PROGRES:
+                print("analyze function :" + func.name)
             self.result.loc[0] = self.analyze_function(func)  # append
 
 
