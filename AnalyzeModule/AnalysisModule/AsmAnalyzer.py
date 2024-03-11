@@ -14,6 +14,7 @@ hex_pattern = re.compile("0[xX][0-9a-fA-F]+")
 col_names = ["name", "addr", "instructions_flat", "instructions_weighted", "default_tripcount_loops",
              "known_tripcount_loops", "thread_dependant_trip_count_loops", "recursions"]
 
+
 def get_region(name, start_addr):
     return pd.Series(data=[name, start_addr] + [0 for i in range(len(col_names) - 2)], index=col_names)
 
@@ -24,7 +25,9 @@ def combine_region(region_a, region_b, weight=1):
     region_a["instructions_weighted"] += region_b["instructions_weighted"] * weight
     return region_a
 
+
 PRINT_ANALYSIS_PROGRES = True
+
 
 class OpenMPRegionAnalysis(angr.Analysis):
 
@@ -33,7 +36,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
         self.result = pd.DataFrame(columns=col_names)
 
-        self.cfg = self.project.analyses.CFGFast(normalize=True,show_progressbar=PRINT_ANALYSIS_PROGRES)
+        self.cfg = self.project.analyses.CFGFast(normalize=True, show_progressbar=PRINT_ANALYSIS_PROGRES)
         self.openmp_regions = [func for addr, func in self.kb.functions.items() if '._omp_fn.' in func.name]
 
         if len(self.openmp_regions) == 0:
@@ -43,9 +46,6 @@ class OpenMPRegionAnalysis(angr.Analysis):
         if PRINT_ANALYSIS_PROGRES:
             print("Prune CFG")
         self.per_function_cfg = get_pruned_cfg(self.cfg.graph)
-        if PRINT_ANALYSIS_PROGRES:
-            print("collect loops")
-        self.loops = list(nx.simple_cycles(self.per_function_cfg))
 
         self.callgraph = self.kb.callgraph
         if PRINT_ANALYSIS_PROGRES:
@@ -136,16 +136,14 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
         # instruction weight of each block
         block_weights = get_block_weight(loop_free_cfg, function_entry_cfg_node)
+        this_function_loops = list(nx.simple_cycles(this_function_cfg))
         # handle loops
-        for loop in self.loops:
-            # self.loops contain all loops from all functions
-            # we only handle loops in current function:
-            if loop[0] in this_function_cfg.nodes:
-                loop_trip_count_factor = self.handleLoop(loop, this_function_cfg, loop_free_cfg,
-                                                         function_entry_cfg_node,
-                                                         current_region)
-                for block in loop:
-                    block_weights[block] *= loop_trip_count_factor
+        for loop in this_function_loops:
+            loop_trip_count_factor = self.handleLoop(loop, this_function_cfg, loop_free_cfg,
+                                                     function_entry_cfg_node,
+                                                     current_region)
+            for block in loop:
+                block_weights[block] *= loop_trip_count_factor
 
         for block in func.blocks:
             cfg_node = self.cfg.get_node(block.addr)
