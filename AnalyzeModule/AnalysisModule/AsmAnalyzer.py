@@ -24,6 +24,7 @@ def combine_region(region_a, region_b, weight=1):
     region_a["instructions_weighted"] += region_b["instructions_weighted"] * weight
     return region_a
 
+PRINT_ANALYSIS_PROGRES = True
 
 class OpenMPRegionAnalysis(angr.Analysis):
 
@@ -32,17 +33,23 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
         self.result = pd.DataFrame(columns=col_names)
 
-        self.cfg = self.project.analyses.CFGFast(normalize=True)
+        self.cfg = self.project.analyses.CFGFast(normalize=True,show_progressbar=PRINT_ANALYSIS_PROGRES)
         self.openmp_regions = [func for addr, func in self.kb.functions.items() if '._omp_fn.' in func.name]
 
         if len(self.openmp_regions) == 0:
             return
         # abort early, if no openmp was found, no need to perform further graph analyses
         # detect loops
+        if PRINT_ANALYSIS_PROGRES:
+            print("Prune CFG")
         self.per_function_cfg = get_pruned_cfg(self.cfg.graph)
+        if PRINT_ANALYSIS_PROGRES:
+            print("collect loops")
         self.loops = list(nx.simple_cycles(self.per_function_cfg))
 
         self.callgraph = self.kb.callgraph
+        if PRINT_ANALYSIS_PROGRES:
+            print("detect recursions")
         # detect recursion
         self.callgraph_cycles = list(nx.simple_cycles(self.callgraph))
 

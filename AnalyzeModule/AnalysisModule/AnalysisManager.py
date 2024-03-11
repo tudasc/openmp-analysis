@@ -8,6 +8,7 @@ import magic
 CONTINUE_ON_EXCEPTION = False
 
 PRINT_ANALYZED_FILES = True
+USE_PARALLEL_PROCESSING = False
 
 
 def analyze_asm_repo_single_arg(args):
@@ -74,7 +75,7 @@ class AnalysisManager:
         self._tripcount_guess = tripcount_guess
 
     # perform the analyses
-    def __call__(self, use_parallel_processing=True):
+    def __call__(self):
         with mp.Pool() as pool:
             param_list = [
                 (repo_dir, self._datadir, self._resultdir, self._ignore_endings, self._ignore_folders,
@@ -87,7 +88,7 @@ class AnalysisManager:
             if not self._refresh_repos:
                 param_list = [p for p in param_list if not p[0] in os.listdir(self._resultdir)]
 
-            if use_parallel_processing:
+            if USE_PARALLEL_PROCESSING:
                 # parallel processing
                 list(tqdm.tqdm(pool.imap_unordered(analyze_asm_repo_single_arg, param_list), total=len(param_list)))
             else:
