@@ -1,5 +1,7 @@
 import networkx
 import networkx as nx
+from matplotlib import pyplot as plt
+
 
 # prune the CFG to remove all "call" and "return" edges, as they will be handles in the callgraph in our analysis
 # returns pruned copy
@@ -15,11 +17,12 @@ def get_pruned_cfg(graph_in):
         graph.remove_edge(edge[0], edge[1])
     return graph
 
+
 def dominates(u, v, im_dominators):
-    #im_dominators holds the parent in the domtree
+    # im_dominators holds the parent in the domtree
     prev_node = v
     cur_node = im_dominators[v]
-    while prev_node != cur_node: # not reached the top
+    while prev_node != cur_node:  # not reached the top
         if cur_node == u:
             return True  # found u in domtree
         # go one lvl up in the domtree
@@ -32,7 +35,7 @@ def dominates(u, v, im_dominators):
 def get_loop_guard(loop, this_function_cfg, entry_node):
     # the loop guard block dominates all loop blocks
     im_dominators = networkx.immediate_dominators(this_function_cfg, entry_node)
-    assert im_dominators[entry_node]==entry_node
+    assert im_dominators[entry_node] == entry_node
 
     guards = []
     for candidate in loop:
@@ -99,46 +102,30 @@ def get_block_weight(loop_free_cfg, entry_node):
 
 
 # remove all loop back edges from cfg
-# iterative algorithm: remove the edge that is included in most loops, but only if all nodes are still reachable, until no more loops remain
+# iterative algorithm: remove the last enge in a cycle detected by DFS, until no more loops remain. checks that all nodes are still reachable
 def remove_back_edges(this_function_cfg, entry_node):
     result = this_function_cfg.copy()
-    reachable = {entry_node} | networkx.descendants(result,
-                                                    entry_node)
-    assert reachable == set(result.nodes)
-
-    loops = list(networkx.simple_cycles(result))
-    num_loops = len(loops)
-    while len(loops) > 0:
-        removal_candidates = {}
-        # collect removal candidates
-        for loop in loops:
-            for i in range(len(loop) - 1):
-                # wrap-around edge
-                if (loop[-1], loop[0]) not in removal_candidates:
-                    removal_candidates[(loop[-1], loop[0])] = 0
-                removal_candidates[(loop[-1], loop[0])] += 1
-                if (loop[i], loop[i + 1]) not in removal_candidates:
-                    removal_candidates[(loop[i], loop[i + 1])] = 0
-                removal_candidates[(loop[i], loop[i + 1])] += 1
-        # sort by number of cycles the edge is part of
-        removal_candidates = dict(sorted(removal_candidates.items(), key=lambda item: item[1]))
-        # try removal
-        for edge, _ in removal_candidates.items():
-            result.remove_edge(edge[0], edge[1])
-            reachable = {entry_node} | networkx.descendants(result,
-                                                            entry_node)
-            if not reachable == set(result.nodes):
-                # removal partitioned graph
-                result.add_edge(edge[0], edge[1])
-            else:
-                # found edge to remove
-                break
-        # check for other loops
-        loops = list(networkx.simple_cycles(result))
-        assert len(loops) < num_loops
-        num_loops = len(loops)
-
     reachable = {entry_node} | networkx.descendants(result, entry_node)
     assert reachable == set(result.nodes)
-    assert len(list(networkx.simple_cycles(result))) == 0
-    return result
+
+    while True:
+        print("find cycle in O( %i + %i)" % (len(result.nodes), len(result.edges)))
+
+        graph = nx.convert_node_labels_to_integers(result)
+        nx.write_adjlist(graph, "test_graph.adjlist")
+        print("written output to test_graph.adjlist")
+
+        # return when no cycle exception is raised
+        try:
+            cycle = nx.find_cycle(result, source=entry_node, orientation='original')
+        except nx.NetworkXNoCycle:
+            reachable = {entry_node} | networkx.descendants(result, entry_node)
+            assert reachable == set(result.nodes)
+            return result
+
+        removal_candidate = cycle[-1]
+        print("remove candidate")
+        result.remove_edge(removal_candidate[0], removal_candidate[1])
+
+        reachable = {entry_node} | networkx.descendants(result, entry_node)
+        assert reachable == set(result.nodes)  # removal should not partition graph
