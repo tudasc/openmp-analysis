@@ -101,6 +101,30 @@ def get_block_weight(loop_free_cfg, entry_node):
     return result
 
 
+# TODO networkx has a bug in find_cycle leading to memory leak and out of mem error??
+def find_cycle_DFS(graph, entry_node):
+    current_path_dict = {entry_node: [entry_node]}
+    to_visit = [entry_node]
+    visited = []
+
+    while len(to_visit) > 0:
+        node = to_visit.pop()
+        current_path = current_path_dict[node]
+        assert current_path[-1]==node
+        visited.append(node)
+        for succ in graph.successors(node):
+            if succ in current_path:
+                # cycle found
+                # cycle is path visited from succ
+                return current_path[current_path.index(succ):]
+            if succ not in visited:
+                to_visit.insert(0, succ)  # to_visit.push
+                current_path_dict[succ] = current_path.copy()+[succ]
+
+    # none found
+    return None
+
+
 # remove all loop back edges from cfg
 # iterative algorithm: remove the last enge in a cycle detected by DFS, until no more loops remain. checks that all nodes are still reachable
 def remove_back_edges(this_function_cfg, entry_node):
@@ -109,21 +133,45 @@ def remove_back_edges(this_function_cfg, entry_node):
     assert reachable == set(result.nodes)
 
     while True:
+
+        # DEBUG ONLY
         print("find cycle in O( %i + %i)" % (len(result.nodes), len(result.edges)))
 
         graph = nx.convert_node_labels_to_integers(result)
+        
         nx.write_adjlist(graph, "test_graph.adjlist")
+
+
         print("written output to test_graph.adjlist")
+        # the entry_node is the node from which we can reach all others
+        entry_node_int = None
+        for node in graph.nodes:
+            reachable = {node} | networkx.descendants(graph, node)
+            if reachable == set(graph.nodes):
+                assert entry_node_int is None  # only one entry node
+                entry_node_int = node
+                # break
+
+        assert entry_node_int is not None
+        # END DEBUG ONLY
 
         # return when no cycle exception is raised
         try:
-            cycle = nx.find_cycle(result, source=entry_node, orientation='original')
+            # DEBUG: integer relabled graph
+            # cycle = nx.find_cycle(graph, source=entry_node_int, orientation='original') ## oom here
+            # print("find cycle in ORIGINAL GRAPH O( %i + %i)" % (len(result.nodes), len(result.edges)))
+            # end debug aonly
+            # cycle = nx.find_cycle(result, source=entry_node, orientation='original')
+            cycle = find_cycle_DFS(result, entry_node)
+            if cycle is None:
+                raise nx.NetworkXNoCycle
         except nx.NetworkXNoCycle:
             reachable = {entry_node} | networkx.descendants(result, entry_node)
             assert reachable == set(result.nodes)
             return result
 
-        removal_candidate = cycle[-1]
+        # removal_candidate = cycle[-1]
+        removal_candidate = [cycle[-1], cycle[0]]
         print("remove candidate")
         result.remove_edge(removal_candidate[0], removal_candidate[1])
 

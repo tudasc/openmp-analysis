@@ -21,13 +21,14 @@ def main():
 
     assert entry_node is not None
 
-    # return when no cycle exception is raised
+
     try:
         cycle = nx.find_cycle(g, source=entry_node, orientation='original')
-        print("Found cycle")
-        print(cycle)
+        print("Found cycle with length")
+        print(len(cycle))
     except nx.NetworkXNoCycle:
         print("No cycles")
+
 
 
 if __name__ == "__main__":
