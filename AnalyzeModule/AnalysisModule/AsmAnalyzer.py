@@ -29,17 +29,16 @@ def combine_region(region_a, region_b, weight=1):
 PRINT_ANALYSIS_PROGRES = True
 
 
-class OpenMPRegionAnalysis():
+class OpenMPRegionAnalysis(angr.Analysis):
 
-    def __init__(self, project, default_trip_count_guess):
+    def __init__(self, default_trip_count_guess):
         self.default_trip_count_guess = default_trip_count_guess
-        self.project = project
 
         self.result = pd.DataFrame(columns=col_names)
         if PRINT_ANALYSIS_PROGRES:
             print("collect CFG")
         self.cfg = self.project.analyses.CFGFast(normalize=True, show_progressbar=PRINT_ANALYSIS_PROGRES)
-        self.openmp_regions = [func for addr, func in self.project.kb.functions.items() if '._omp_fn.' in func.name]
+        self.openmp_regions = [func for addr, func in self.kb.functions.items() if '._omp_fn.' in func.name]
 
         if len(self.openmp_regions) == 0:
             return
@@ -51,7 +50,7 @@ class OpenMPRegionAnalysis():
 
         if PRINT_ANALYSIS_PROGRES:
             print("collect callgraph")
-        self.callgraph = self.project.kb.callgraph
+        self.callgraph = self.kb.callgraph
         if PRINT_ANALYSIS_PROGRES:
             print("detect recursions")
         # detect recursion
@@ -169,7 +168,7 @@ class OpenMPRegionAnalysis():
             for tgt, jmp_kind in self.cfg.get_successors_and_jumpkind(cfg_node):
                 # handle call
                 if jmp_kind == 'Ijk_Call':
-                    tgt_func = self.project.kb.functions.get_by_addr(tgt.addr)
+                    tgt_func = self.kb.functions.get_by_addr(tgt.addr)
                     if not tgt_func == func:
                         target_call_region = self.analyze_function(tgt_func)
                         # TODO use block weight?
@@ -194,6 +193,10 @@ class OpenMPRegionAnalysis():
         for func in self.openmp_regions:
             if PRINT_ANALYSIS_PROGRES:
                 self.result.loc[0] = self.analyze_function(func)  # append
+
+
+angr.analyses.register_analysis(OpenMPRegionAnalysis,
+                                'OpenMPRegionAnalysis')  # register the class with angr's global analysis list
 
 
 class AsmAnalyzer:
@@ -224,7 +227,7 @@ class AsmAnalyzer:
                 plot_cfg(cfg, fname_to_use, asminst=True, func_addr={func.addr: True}, remove_imports=True,
                          remove_path_terminator=True)
 
-        parallel_regions = OpenMPRegionAnalysis(proj,default_trip_count_guess).result
+        parallel_regions = proj.analyses.OpenMPRegionAnalysis(default_trip_count_guess).result
         assert isinstance(parallel_regions, pd.DataFrame)
         parallel_regions['DEFAULT_TRIPCOUNT_GUESS'] = default_trip_count_guess
 
