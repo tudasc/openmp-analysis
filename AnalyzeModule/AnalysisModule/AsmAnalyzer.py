@@ -142,6 +142,12 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
         # instruction weight of each block
         block_weights = get_block_weight(loop_free_cfg, function_entry_cfg_node)
+
+        print("LIST_SMPLE_CYCLES")
+        ##TODO problem with loops here
+        # WE cannot list loops
+        # from loop pruning: we find all loop back edges
+        # then we can do domtree analysis to find out if a block is in side of a given loop defined as in between start and loop end in loop free cfg
         this_function_loops = list(nx.simple_cycles(this_function_cfg))
         # handle loops
         for loop in this_function_loops:
