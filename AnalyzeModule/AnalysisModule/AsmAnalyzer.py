@@ -192,9 +192,9 @@ class OpenMPRegionAnalysis(angr.Analysis):
         return current_region
 
     def run(self):
-        for func in self.openmp_regions:
+        for i,func in enumerate(self.openmp_regions):
             if PRINT_ANALYSIS_PROGRES:
-                self.result.loc[0] = self.analyze_function(func)  # append
+                self.result.loc[i] = self.analyze_function(func)
 
 
 angr.analyses.register_analysis(OpenMPRegionAnalysis,
