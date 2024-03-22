@@ -37,8 +37,9 @@ def dominates(u, v, im_dominators):
 
 def get_loop_nodes(back_edge, this_function_loop_free_cfg):
     return [n for n in this_function_loop_free_cfg.nodes if
-            nx.has_path(this_function_loop_free_cfg, back_edge[0], n)
-            and nx.has_path(this_function_loop_free_cfg, n, back_edge[1])]
+            # back-edge has "reverse" direction
+            nx.has_path(this_function_loop_free_cfg, back_edge[1], n)
+            and nx.has_path(this_function_loop_free_cfg, n, back_edge[0])]
 
 
 def get_loop_guard(back_edge, this_function_cfg, this_function_loop_free_cfg, entry_node):
