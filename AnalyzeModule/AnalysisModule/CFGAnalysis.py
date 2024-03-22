@@ -35,17 +35,25 @@ def dominates(u, v, im_dominators):
     return False
 
 
-def get_loop_guard(loop, this_function_cfg, entry_node):
+def get_loop_nodes(back_edge, this_function_loop_free_cfg):
+    return [n for n in this_function_loop_free_cfg.nodes if
+            nx.has_path(this_function_loop_free_cfg, back_edge[0], n)
+            and nx.has_path(this_function_loop_free_cfg, n, back_edge[1])]
+
+
+def get_loop_guard(back_edge, this_function_cfg, this_function_loop_free_cfg, entry_node):
     # the loop guard block dominates all loop blocks
     im_dominators = networkx.immediate_dominators(this_function_cfg, entry_node)
     assert im_dominators[entry_node] == entry_node
 
+    loop_nodes = get_loop_nodes(back_edge, this_function_loop_free_cfg)
+
     guards = []
-    for candidate in loop:
+    for candidate in loop_nodes:
         is_entry = True
         is_exit = True
 
-        for bbb in loop:
+        for bbb in loop_nodes:
             if dominates(candidate, bbb, im_dominators):
                 is_entry = False
             if dominates(bbb, candidate, im_dominators):
@@ -57,7 +65,7 @@ def get_loop_guard(loop, this_function_cfg, entry_node):
     for guard in guards:
         goes_outside = False
         for succ in this_function_cfg.successors(guard):
-            if succ not in loop:
+            if succ not in loop_nodes:
                 goes_outside = True
                 break
         if goes_outside:
@@ -103,10 +111,12 @@ def get_block_weight(loop_free_cfg, entry_node):
 
     return result
 
+
 # remove all loop back edges from cfg
 # iterative algorithm: remove the last enge in a cycle detected by DFS, until no more loops remain. checks that all nodes are still reachable
 def remove_back_edges(this_function_cfg, entry_node):
     result = this_function_cfg.copy()
+    back_edges = []
 
     reachable = {entry_node} | networkx.descendants(result, entry_node)
     assert reachable == set(result.nodes)
@@ -118,10 +128,11 @@ def remove_back_edges(this_function_cfg, entry_node):
         except nx.NetworkXNoCycle:
             reachable = {entry_node} | networkx.descendants(result, entry_node)
             assert reachable == set(result.nodes)
-            return result
+            return result, back_edges
 
         removal_candidate = cycle[-1]
         result.remove_edge(removal_candidate[0], removal_candidate[1])
+        back_edges.append(removal_candidate)
 
         reachable = {entry_node} | networkx.descendants(result, entry_node)
         assert reachable == set(result.nodes)  # removal should not partition graph

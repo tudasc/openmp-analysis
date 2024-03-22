@@ -6,7 +6,8 @@ import networkx as nx
 import pandas as pd
 from angrutils import plot_cfg
 
-from AnalyzeModule.AnalysisModule.CFGAnalysis import get_loop_guard, get_block_weight, remove_back_edges, get_pruned_cfg
+from AnalyzeModule.AnalysisModule.CFGAnalysis import get_loop_guard, get_block_weight, remove_back_edges, \
+    get_pruned_cfg, get_loop_nodes
 from AnalyzeModule.AnalysisModule.ThreadNumAnalysis import get_instructions_based_on_thread_num
 
 hex_pattern = re.compile("0[xX][0-9a-fA-F]+")
@@ -65,10 +66,10 @@ class OpenMPRegionAnalysis(angr.Analysis):
     def handleRecursion(self, region):
         region['recursions'] += 1
 
-    def handleLoop(self, loop, this_function_cfg, this_function_loop_free_cfg, entry_node, region):
+    def handleLoop(self, back_edge, this_function_cfg, this_function_loop_free_cfg, entry_node, region):
         # try to get trip count of loop
 
-        trip_count_guess = self.get_tripcount_guess(entry_node, loop, this_function_cfg, this_function_loop_free_cfg)
+        trip_count_guess = self.get_tripcount_guess(entry_node, back_edge, this_function_cfg, this_function_loop_free_cfg)
 
         if trip_count_guess == 'DEFAULT':
             region['default_tripcount_loops'] += 1
@@ -80,9 +81,9 @@ class OpenMPRegionAnalysis(angr.Analysis):
             region['known_tripcount_loops'] += 1
         return trip_count_guess
 
-    def get_tripcount_guess(self, entry_node, loop, this_function_cfg, this_function_loop_free_cfg):
+    def get_tripcount_guess(self, entry_node, back_edge, this_function_cfg, this_function_loop_free_cfg):
         trip_count_guess = 'DEFAULT'
-        guard_block_addr = get_loop_guard(loop, this_function_cfg, entry_node)
+        guard_block_addr = get_loop_guard(back_edge, this_function_cfg,this_function_loop_free_cfg, entry_node)
         if guard_block_addr is not None:
             guard_block = self.project.factory.block(guard_block_addr.addr)
             if guard_block.instructions >= 2:  # has another instruction
@@ -102,7 +103,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
                     if as_int is not None:
                         # print("Found Constant Trip count of loop: %d" % int(as_int))
                         # check if other opreand is incremented by 1 every loop trip
-                        for bb_addr in loop:
+                        for bb_addr in get_loop_nodes(back_edge, this_function_loop_free_cfg):
                             bb = self.project.factory.block(bb_addr.addr)
                             for inst in bb.disassembly.insns:
                                 if inst.mnemonic == 'add':
@@ -137,24 +138,19 @@ class OpenMPRegionAnalysis(angr.Analysis):
                                               {function_entry_cfg_node} | networkx.descendants(self.per_function_cfg,
                                                                                                function_entry_cfg_node))
         # remove all back edges from cfg to approximate the branch nesting level of each block
-        loop_free_cfg = remove_back_edges(this_function_cfg, function_entry_cfg_node)
+        loop_free_cfg,back_edges = remove_back_edges(this_function_cfg, function_entry_cfg_node)
         # end for each block
 
         # instruction weight of each block
         block_weights = get_block_weight(loop_free_cfg, function_entry_cfg_node)
 
-        print("LIST_SMPLE_CYCLES")
-        ##TODO problem with loops here
-        # WE cannot list loops
-        # from loop pruning: we find all loop back edges
-        # then we can do domtree analysis to find out if a block is in side of a given loop defined as in between start and loop end in loop free cfg
-        this_function_loops = list(nx.simple_cycles(this_function_cfg))
-        # handle loops
-        for loop in this_function_loops:
-            loop_trip_count_factor = self.handleLoop(loop, this_function_cfg, loop_free_cfg,
+       # handle loops
+        for back_edge in back_edges:
+            loop_trip_count_factor = self.handleLoop(back_edge, this_function_cfg, loop_free_cfg,
                                                      function_entry_cfg_node,
                                                      current_region)
-            for block in loop:
+
+            for block in get_loop_nodes(back_edge,loop_free_cfg):
                 block_weights[block] *= loop_trip_count_factor
 
         for block in func.blocks:
