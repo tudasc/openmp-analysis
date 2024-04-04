@@ -2,6 +2,8 @@ import re
 
 import networkx as nx
 
+dynamic_scheduling_funcs = ["GOMP_loop_nonmonotonic_guided_next","GOMP_loop_nonmonotonic_dynamic_next"]
+
 
 def is_register(reg):
     return reg in ['rax', 'rbx', 'rcx', 'rsp', 'rbp', 'rdi', 'rsi', 'rdx',

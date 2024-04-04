@@ -8,7 +8,8 @@ from angrutils import plot_cfg
 
 from AnalyzeModule.AnalysisModule.CFGAnalysis import get_loop_guard, get_block_weight, remove_back_edges, \
     get_pruned_cfg, get_loop_nodes
-from AnalyzeModule.AnalysisModule.ThreadNumAnalysis import get_instructions_based_on_thread_num
+from AnalyzeModule.AnalysisModule.ThreadNumAnalysis import get_instructions_based_on_thread_num, \
+    dynamic_scheduling_funcs
 
 hex_pattern = re.compile("0[xX][0-9a-fA-F]+")
 
@@ -69,7 +70,8 @@ class OpenMPRegionAnalysis(angr.Analysis):
     def handleLoop(self, back_edge, this_function_cfg, this_function_loop_free_cfg, entry_node, region):
         # try to get trip count of loop
 
-        trip_count_guess = self.get_tripcount_guess(entry_node, back_edge, this_function_cfg, this_function_loop_free_cfg)
+        trip_count_guess = self.get_tripcount_guess(entry_node, back_edge, this_function_cfg,
+                                                    this_function_loop_free_cfg)
 
         if trip_count_guess == 'DEFAULT':
             region['default_tripcount_loops'] += 1
@@ -83,10 +85,11 @@ class OpenMPRegionAnalysis(angr.Analysis):
 
     def get_tripcount_guess(self, entry_node, back_edge, this_function_cfg, this_function_loop_free_cfg):
         trip_count_guess = 'DEFAULT'
-        guard_block_addr = get_loop_guard(back_edge, this_function_cfg,this_function_loop_free_cfg, entry_node)
+        guard_block_addr = get_loop_guard(back_edge, this_function_cfg, this_function_loop_free_cfg, entry_node)
         if guard_block_addr is not None:
             guard_block = self.project.factory.block(guard_block_addr.addr)
             if guard_block.instructions >= 2:  # has another instruction
+                # static schedule
                 if guard_block.disassembly.insns[-2].mnemonic == "cmp":
                     cmp = guard_block.disassembly.insns[-2]
                     # found the loops cmp instruction
@@ -118,9 +121,25 @@ class OpenMPRegionAnalysis(angr.Analysis):
                     if cmp.address in get_instructions_based_on_thread_num(self.project, self.cfg,
                                                                            this_function_loop_free_cfg, entry_node):
                         assert trip_count_guess == 'DEFAULT'
-                        # print("Found Trip count dependant on NUM_THREADS")
+                        # print("Found Trip count dependent on NUM_THREADS")
                         trip_count_guess = 'DEPEND_ON_THREAD_NUM'
-                    # pass
+                # dynamic schedule
+                elif guard_block.disassembly.insns[-2].mnemonic == "test":
+                    predecessors = list(this_function_cfg.predecessors(guard_block_addr))
+                    if len(predecessors) == 1:
+                        if (this_function_cfg[predecessors[0]][guard_block_addr]['jumpkind'] == 'Ijk_FakeRet'):
+                            tgt_func = None
+                            for tgt, jmp_kind in self.cfg.get_successors_and_jumpkind(predecessors[0]):
+                                # handle call
+                                if jmp_kind == 'Ijk_Call':
+                                    assert tgt_func is None
+                                    tgt_func = self.kb.functions.get_by_addr(tgt.addr)
+
+                            if tgt_func.name in dynamic_scheduling_funcs:
+                                assert trip_count_guess == 'DEFAULT'
+                                # print("Found loop with dynamic schedule: Trip count dependent on NUM_THREADS")
+                                trip_count_guess = 'DEPEND_ON_THREAD_NUM'
+
         return trip_count_guess
 
     def analyze_function(self, func):
@@ -138,19 +157,19 @@ class OpenMPRegionAnalysis(angr.Analysis):
                                               {function_entry_cfg_node} | networkx.descendants(self.per_function_cfg,
                                                                                                function_entry_cfg_node))
         # remove all back edges from cfg to approximate the branch nesting level of each block
-        loop_free_cfg,back_edges = remove_back_edges(this_function_cfg, function_entry_cfg_node)
+        loop_free_cfg, back_edges = remove_back_edges(this_function_cfg, function_entry_cfg_node)
         # end for each block
 
         # instruction weight of each block
         block_weights = get_block_weight(loop_free_cfg, function_entry_cfg_node)
 
-       # handle loops
+        # handle loops
         for back_edge in back_edges:
             loop_trip_count_factor = self.handleLoop(back_edge, this_function_cfg, loop_free_cfg,
                                                      function_entry_cfg_node,
                                                      current_region)
 
-            for block in get_loop_nodes(back_edge,loop_free_cfg):
+            for block in get_loop_nodes(back_edge, loop_free_cfg):
                 block_weights[block] *= loop_trip_count_factor
 
         for block in func.blocks:
@@ -192,7 +211,7 @@ class OpenMPRegionAnalysis(angr.Analysis):
         return current_region
 
     def run(self):
-        for i,func in enumerate(self.openmp_regions):
+        for i, func in enumerate(self.openmp_regions):
             if PRINT_ANALYSIS_PROGRES:
                 self.result.loc[i] = self.analyze_function(func)
 
