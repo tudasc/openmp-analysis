@@ -4,7 +4,7 @@ import angr
 import networkx
 import networkx as nx
 import pandas as pd
-from angrutils import plot_cfg
+#from angrutils import plot_cfg
 
 from AnalyzeModule.AnalysisModule.CFGAnalysis import get_loop_guard, get_block_weight, remove_back_edges, \
     get_pruned_cfg, get_loop_nodes
@@ -231,6 +231,7 @@ class AsmAnalyzer:
         proj = angr.Project(source, load_options={'auto_load_libs': False})
 
         if print_cfg:
+            assert False and "NOT IMPLEMENTED WITHOUT INSTALLING ANGRUTILS"
             cfg = proj.analyses.CFGFast(normalize=True)
             functions = dict(proj.kb.functions)
             for addr, func in functions.items():
