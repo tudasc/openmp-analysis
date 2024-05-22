@@ -1,5 +1,6 @@
-binaryornot
 matplotlib
 pandas
 pygithub
 tqdm
+angr
+python-magic
