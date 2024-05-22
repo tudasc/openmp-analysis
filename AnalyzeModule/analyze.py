@@ -28,6 +28,12 @@ def main():
     df_repos = pd.read_csv(args.repo_list, index_col=0)
     # filter for those that have a script
     df_repos = df_repos[~df_repos['build_script'].isna()]
+    # autofail is not a valid build script (it is a placeholder used to indicate failure)
+    df_repos = df_repos[~df_repos['build_script'].str.endswith("autofail.sh")]
+
+    # TODO why is there an error in the repo?
+    df_repos = df_repos[~df_repos['build_script'].str.endswith("FastGeodis")]
+
     # fully qualify the script path
     df_repos['build_script'] = df_repos['build_script'].apply(lambda x: args.build_script_dir + '/' + str(x))
 
