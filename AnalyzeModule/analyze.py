@@ -31,9 +31,6 @@ def main():
     # fully qualify the script path
     df_repos['build_script'] = df_repos['build_script'].apply(lambda x: args.build_script_dir + '/' + str(x))
 
-    # TODO DEBUG ONLY
-    df_repos = df_repos.iloc[0:2]
-
     usageAnalyzer = AnalysisManager(df_repos, args.data_dir, args.results_dir, ignore_endings, ignore_folders,
                                     args.refresh, args.tripcount_guess, args.keep, args.print_cfg)
 
