@@ -17,5 +17,9 @@ class Parser:
         parser.add_argument("--ignore_folders", default=None, action="store", help="Path to the file containing the folder names to be ignored.")
         parser.add_argument("--tripcount_guess", default=3,type=int, action='store',
                             help='Guess of tripcount for loops (use --refresh to re-analyze all repos when chainging the guess)')
+        parser.add_argument('--build_script_dir', default='./data/raw', help='Location where the build scripts are located')
+        parser.add_argument('--repo_list', default='repos.csv',
+                                  help='where the repos are listed with teh build instructions')
+
 
         return parser.parse_args()
