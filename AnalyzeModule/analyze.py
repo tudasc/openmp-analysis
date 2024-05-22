@@ -4,6 +4,8 @@ import pandas as pd
 import os
 
 
+## invocatipon example: python AnalyzeModule/analyze.py --data_dir /work/scratch/tj75qeje/openmp-usage-analysis-binaries/REPOS/ --results_dir /work/scratch/tj75qeje/openmp-usage-analysis-binaries/RESULTS/ --build_script_dir /work/scratch/tj75qeje/openmp-usage-analysis-binaries/scripts --repo_list /work/scratch/tj75qeje/openmp-usage-analysis-binaries/tj_result.csv
+
 def main():
     args = Parser.parseInput()
 
@@ -27,11 +29,13 @@ def main():
     # filter for those that have a script
     df_repos = df_repos[~df_repos['build_script'].isna()]
     # fully qualify the script path
-    df_repos['build_script'] = df_repos['build_script'].apply(lambda x: args.build_script_dir+'/' + str(x))
+    df_repos['build_script'] = df_repos['build_script'].apply(lambda x: args.build_script_dir + '/' + str(x))
 
+    # TODO DEBUG ONLY
+    df_repos = df_repos.iloc[0:2]
 
-    usageAnalyzer = AnalysisManager(args.data_dir, args.results_dir, ignore_endings, ignore_folders, args.refresh,
-                                    args.print_cfg, args.tripcount_guess)
+    usageAnalyzer = AnalysisManager(df_repos, args.data_dir, args.results_dir, ignore_endings, ignore_folders,
+                                    args.refresh, args.tripcount_guess, args.print_cfg)
 
     usageAnalyzer()
 

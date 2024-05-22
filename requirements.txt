@@ -4,3 +4,4 @@ pygithub
 tqdm
 angr
 python-magic
+pandarallel
