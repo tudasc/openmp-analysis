@@ -119,11 +119,8 @@ def analyze_asm_repo(row, print_analyzed_repos=True, print_analyzed_files=False)
             else:
                 if print_analyzed_files:
                     print("skip file %s" % this_file)
-
-    else:
-        pass
-        # no analysis
-
+    if not row["keep"]:
+        shutil.rmtree(repo_path)
 
 class AnalysisManager:
     __slots__ = (
@@ -132,7 +129,8 @@ class AnalysisManager:
         '_print_cfg')
 
     # TODO: refactor: we dont need an object for this
-    def __init__(self, df_repos, datadir, resultdir, ignore_endings, ignore_folders, refresh_repos, tripcount_guess,
+    def __init__(self, df_repos, datadir, resultdir, ignore_endings, ignore_folders, refresh_repos, keep_repos,
+                 tripcount_guess,
                  print_cfg):
         assert os.path.isdir(datadir) and "The path where the repositories are lying must exist"
         if refresh_repos and os.path.isdir(resultdir):
@@ -148,6 +146,7 @@ class AnalysisManager:
 
         self._resultdir = resultdir
         self._df_repos["resultdir"] = resultdir
+        self._df_repos["keep"] = keep_repos
         self._df_repos["ignore_folders"] = [ignore_folders] * len(df_repos)
         self._df_repos["ignore_endings"] = [ignore_endings] * len(df_repos)
         # for usage without angr_utils

@@ -35,7 +35,7 @@ def main():
     df_repos = df_repos.iloc[0:2]
 
     usageAnalyzer = AnalysisManager(df_repos, args.data_dir, args.results_dir, ignore_endings, ignore_folders,
-                                    args.refresh, args.tripcount_guess, args.print_cfg)
+                                    args.refresh, args.tripcount_guess, args.keep, args.print_cfg)
 
     usageAnalyzer()
 

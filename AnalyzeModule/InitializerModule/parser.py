@@ -11,6 +11,8 @@ class Parser:
             description="Analyzes all repositories (directories) in --data_dir. collect all results to --results_dir.")
         parser.add_argument("--refresh", action='store_true', default=False,
                             help='Re evaluate all repositories and re-fresh their analysis results')
+        parser.add_argument("--keep", action='store_true', default=False,
+                            help='Keep the Repos around after analysis')
         parser.add_argument("--print_cfg", action='store_true', default=False,
                             help='prints a CFG for each binary analyzed')
         parser.add_argument("--data_dir", help="Location where the repositories are lying", required=True)
