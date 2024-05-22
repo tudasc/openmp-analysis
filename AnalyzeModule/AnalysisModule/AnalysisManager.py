@@ -122,6 +122,7 @@ def analyze_asm_repo(row, print_analyzed_repos=True, print_analyzed_files=False)
     if not row["keep"]:
         shutil.rmtree(repo_path)
 
+
 class AnalysisManager:
     __slots__ = (
         '_df_repos', '_datadir', '_asmdir', '_resultdir', '_ignore_endings', '_ignore_folders', '_refresh_repos',
@@ -156,20 +157,19 @@ class AnalysisManager:
 
     # perform the analyses
     def __call__(self):
-        with mp.Pool() as pool:
 
-            # filter out the repos where we have already collected some data
-            existing_files = os.listdir(self._resultdir)
-            df_repos = self._df_repos[
-                self._df_repos["Code"].apply(lambda x: x.replace('/', '--') not in existing_files)]
+        # filter out the repos where we have already collected some data
+        existing_files = os.listdir(self._resultdir)
+        df_repos = self._df_repos[
+            self._df_repos["Code"].apply(lambda x: x.replace('/', '--') not in existing_files)]
 
-            if USE_PARALLEL_PROCESSING:
-                # parallel processing
-                df_repos.parallel_apply(analyze_asm_repo_single_arg, axis=1)
-            else:
-                # serial processing
-                df_repos.progress_apply(analyze_asm_repo_single_arg, axis=1)
+        if USE_PARALLEL_PROCESSING:
+            # parallel processing
+            df_repos.parallel_apply(analyze_asm_repo_single_arg, axis=1)
+        else:
+            # serial processing
+            df_repos.progress_apply(analyze_asm_repo_single_arg, axis=1)
 
-            print('Analysis finished.')
+        print('Analysis finished.')
 
         return 0
