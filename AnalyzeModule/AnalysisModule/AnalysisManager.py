@@ -124,7 +124,7 @@ def analyze_asm_repo(row, print_analyzed_repos=True, print_analyzed_files=False)
     if not row["keep"]:
         shutil.rmtree(repo_path)
 
-    marker_file = os.path.join(outdir, outname,MARKER_FILE_NAME)
+    marker_file = os.path.join(outdir, MARKER_FILE_NAME)
     with open(marker_file, 'w') as f:
         sttime = datetime.now().strftime('%Y%m%d_%H:%M:%S')
         f.write(sttime)
