@@ -22,6 +22,8 @@ USE_PARALLEL_PROCESSING = True
 
 MARKER_FILE_NAME = "analysis_finished"
 
+class RepoUnavailable(Exception):
+    pass
 
 def cloneRepo(repoUrl, path, commit_hash=None):
     try:
@@ -29,9 +31,17 @@ def cloneRepo(repoUrl, path, commit_hash=None):
         if not os.path.isdir(path):
             # not already present:
             # download
-            subprocess.check_output(f'git clone --depth 1 {repoUrl} {path}', stderr=subprocess.STDOUT, shell=True,
-                                    encoding='UTF-8')
+            # check if URL is still available
 
+            server_status = subprocess.check_output(
+                "curl -S  --head --request GET {" + repoUrl + "} 2>/dev/null | head -n1 | awk '{print $2}'", shell=True,
+                encoding='UTF-8')
+            print("Server status = ", server_status)
+            if server_status == "200":
+                subprocess.check_output(f'git clone --depth 1 {repoUrl} {path}', stderr=subprocess.STDOUT, shell=True,
+                                        encoding='UTF-8')
+            else:
+                raise RepoUnavailable(server_status)
         # get current hash, remove trailing \n
         current_hash = subprocess.check_output(f'git rev-parse --verify HEAD', cwd=path, stderr=subprocess.STDOUT,
                                                shell=True, encoding='UTF-8').strip()
@@ -47,7 +57,7 @@ def cloneRepo(repoUrl, path, commit_hash=None):
             return commit_hash
 
     except subprocess.CalledProcessError as e:
-        print("ERROR: downloading Repo:")
+        print("ERROR: downloading Repo (", repoUrl, ") to (", path, "):")
         print(e.output)
 
 
