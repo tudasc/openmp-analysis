@@ -230,6 +230,8 @@ class AsmAnalyzer:
     def __call__(self, source, outfile, default_trip_count_guess, print_cfg):
         proj = angr.Project(source, load_options={'auto_load_libs': False})
 
+
+
         if print_cfg:
             assert False and "NOT IMPLEMENTED WITHOUT INSTALLING ANGRUTILS"
             cfg = proj.analyses.CFGFast(normalize=True)
@@ -251,9 +253,24 @@ class AsmAnalyzer:
 
         parallel_regions = proj.analyses.OpenMPRegionAnalysis(default_trip_count_guess).result
         assert isinstance(parallel_regions, pd.DataFrame)
-        parallel_regions['DEFAULT_TRIPCOUNT_GUESS'] = default_trip_count_guess
 
         if len(parallel_regions) > 0:
+            total_instructions_count = 0
+            # Iterate over all functions in the binary
+            for function in proj.loader.main_object.functions.values():
+                # Iterate over all basic blocks in the function
+                for block_addr in function.block_addrs:
+                    # Get the basic block
+                    block = proj.factory.block(block_addr)
+                    # Get the count of assembly instructions in the basic block
+                    # Add the count of assembly instructions in the basic block to the total count
+                    total_instructions_count += len(block.capstone.insns)
+
+            parallel_regions['TOTAL_FILE_INSTR_COUNT'] = total_instructions_count
+            parallel_regions['DEFAULT_TRIPCOUNT_GUESS'] = default_trip_count_guess
+
+
+
             parallel_regions.to_csv(outfile)
 
         return 0
