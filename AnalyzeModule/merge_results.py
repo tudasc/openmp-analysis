@@ -28,7 +28,7 @@ def main():
                     this_file = os.path.join(root, name)
                     this_df = pd.read_csv(this_file, index_col=0)
                     this_df["Code"] = this_repo
-                    # remove the .csv result in original binary name
+                    # remove the ".csv" in original file name to get binary name
                     this_df["File"] = os.path.basename(this_file)[:-3]
                     df_full = pd.concat([df_full, this_df])
 
