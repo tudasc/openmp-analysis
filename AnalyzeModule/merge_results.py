@@ -29,7 +29,7 @@ def main():
                     this_df = pd.read_csv(this_file, index_col=0)
                     this_df["Code"] = this_repo
                     # remove the ".csv" in original file name to get binary name
-                    this_df["File"] = os.path.basename(this_file)[:-3]
+                    this_df["File"] = os.path.basename(this_file)[:-4]
                     df_full = pd.concat([df_full, this_df])
 
     df_full.to_csv(ARGS.output)
