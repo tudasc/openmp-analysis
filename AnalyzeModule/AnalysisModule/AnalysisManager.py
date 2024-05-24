@@ -1,9 +1,9 @@
 import os
-import tqdm
+
 from tqdm.auto import tqdm
+from datetime import datetime
 
 tqdm.pandas()
-import multiprocessing as mp
 import pandas as pd
 from AnalysisModule.AsmAnalyzer import AsmAnalyzer
 import magic
@@ -19,6 +19,8 @@ CONTINUE_ON_EXCEPTION = False
 
 PRINT_ANALYZED_FILES = False
 USE_PARALLEL_PROCESSING = True
+
+MARKER_FILE_NAME = "analysis_finished"
 
 
 def cloneRepo(repoUrl, path, commit_hash=None):
@@ -122,6 +124,10 @@ def analyze_asm_repo(row, print_analyzed_repos=True, print_analyzed_files=False)
     if not row["keep"]:
         shutil.rmtree(repo_path)
 
+    marker_file = os.path.join(outdir, outname,MARKER_FILE_NAME)
+    with open(marker_file, 'w') as f:
+        sttime = datetime.now().strftime('%Y%m%d_%H:%M:%S')
+        f.write(sttime)
 
 class AnalysisManager:
     __slots__ = (
@@ -160,8 +166,10 @@ class AnalysisManager:
 
         # filter out the repos where we have already collected some data
         existing_files = os.listdir(self._resultdir)
+        analysis_finished = [e for e in existing_files if os.path.isfile(os.path.join(e, MARKER_FILE_NAME))]
+
         df_repos = self._df_repos[
-            self._df_repos["Code"].apply(lambda x: x.replace('/', '--') not in existing_files)]
+            self._df_repos["Code"].apply(lambda x: x.replace('/', '--') not in analysis_finished)]
 
         if USE_PARALLEL_PROCESSING:
             # parallel processing
