@@ -257,11 +257,9 @@ class AsmAnalyzer:
         if len(parallel_regions) > 0:
             total_instructions_count = 0
             # Iterate over all functions in the binary
-            for function in proj.loader.main_object.functions.values():
+            for addr, func in proj.kb.functions.items():
                 # Iterate over all basic blocks in the function
-                for block_addr in function.block_addrs:
-                    # Get the basic block
-                    block = proj.factory.block(block_addr)
+                for block in func.blocks:
                     # Get the count of assembly instructions in the basic block
                     # Add the count of assembly instructions in the basic block to the total count
                     total_instructions_count += len(block.capstone.insns)
