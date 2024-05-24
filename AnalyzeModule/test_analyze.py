@@ -1,8 +1,6 @@
 import subprocess
 
 from AnalyzeModule.AnalysisModule.AsmAnalyzer import AsmAnalyzer
-from InitializerModule.parser import Parser
-from AnalysisModule.AnalysisManager import AnalysisManager
 import pandas as pd
 import os
 
@@ -25,6 +23,8 @@ def main():
         analyzer(exe, os.path.join(path, "output.csv"), 3, False)
 
         os.remove(exe)
+        # TODO compare against an expected_output
+        os.remove(os.path.join(path, "output.csv"))
 
 
 if __name__ == '__main__':
