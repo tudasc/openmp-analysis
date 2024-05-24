@@ -168,7 +168,7 @@ def get_instructions_based_on_thread_num(project, full_cfg, this_function_loop_f
             elif len(operands) == 1:
                 if operands[0] == "":
                     # 0 operands
-                    if inst.mnemonic == "ret":
+                    if inst.mnemonic in ["ret","leave"]:
                         continue  # end of this branch
                     elif inst.mnemonic in ["cwd", "cdq", "cqo"]:
                         if 'edx' in tainted_registers:
