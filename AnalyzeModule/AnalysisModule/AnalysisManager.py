@@ -15,7 +15,7 @@ from pandarallel import pandarallel
 pandarallel.initialize(nb_workers=24, progress_bar=True)
 
 # for debugging
-CONTINUE_ON_EXCEPTION = False
+CONTINUE_ON_EXCEPTION = True
 
 PRINT_ANALYZED_FILES = False
 USE_PARALLEL_PROCESSING = True
