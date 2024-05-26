@@ -22,38 +22,37 @@ USE_PARALLEL_PROCESSING = True
 
 MARKER_FILE_NAME = "analysis_finished"
 
+
 class RepoUnavailable(Exception):
     pass
 
+
 def cloneRepo(repoUrl, path, commit_hash=None):
+    environ_vars = os.environ.copy()
+    # git should not ask fir credentials but fail instead
+    environ_vars["GIT_TERMINAL_PROMPT"] = "0"
     try:
         # remove any old repo
         if not os.path.isdir(path):
             # not already present:
             # download
-            # check if URL is still available
+            subprocess.check_output(f'GIT_TERMINAL_PROMPT=0 git clone --depth 1 {repoUrl} {path}',
+                                    stderr=subprocess.STDOUT, shell=True,
+                                    encoding='UTF-8',
+                                    env=environ_vars)
 
-            server_status = subprocess.check_output(
-                "curl -S  --head --request GET {" + repoUrl + "} 2>/dev/null | head -n1 | awk '{print $2}'", shell=True,
-                encoding='UTF-8')
-            print("Server status = ", server_status)
-            if server_status == "200":
-                subprocess.check_output(f'git clone --depth 1 {repoUrl} {path}', stderr=subprocess.STDOUT, shell=True,
-                                        encoding='UTF-8')
-            else:
-                raise RepoUnavailable(server_status)
         # get current hash, remove trailing \n
         current_hash = subprocess.check_output(f'git rev-parse --verify HEAD', cwd=path, stderr=subprocess.STDOUT,
-                                               shell=True, encoding='UTF-8').strip()
+                                               shell=True, encoding='UTF-8',env=environ_vars).strip()
         if commit_hash is None or current_hash == commit_hash:
             return current_hash
         else:
             # fetch different revision
             # TODO one could check that origin-url is set up correctly
             subprocess.check_output(f'git fetch --depth 1 origin {commit_hash}', cwd=path, stderr=subprocess.STDOUT,
-                                    shell=True, encoding='UTF-8')
+                                    shell=True, encoding='UTF-8',env=environ_vars)
             subprocess.check_output(f'git checkout {commit_hash}', cwd=path, stderr=subprocess.STDOUT,
-                                    shell=True, encoding='UTF-8')
+                                    shell=True, encoding='UTF-8',env=environ_vars)
             return commit_hash
 
     except subprocess.CalledProcessError as e:
@@ -138,6 +137,7 @@ def analyze_asm_repo(row, print_analyzed_repos=True, print_analyzed_files=False)
     with open(marker_file, 'w') as f:
         sttime = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
         f.write(sttime)
+
 
 class AnalysisManager:
     __slots__ = (
