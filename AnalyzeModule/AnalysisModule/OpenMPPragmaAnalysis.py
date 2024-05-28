@@ -1,4 +1,5 @@
 import re
+import os
 import subprocess
 
 import pandas as pd
@@ -55,82 +56,76 @@ def get_preliminary_grep(dir, statement):
         return []
 
 
-def get_normalized_file_content(self, file):
+def get_normalized_file_content(file):
     if os.path.isfile(file):
-        # there may be links, we do not follow those
-        if file in self._normalized_files_cache:
-            return self._normalized_files_cache[file]
+        if is_c_file(file) or is_cpp_file(file):
+            try:
+                result = subprocess.check_output(
+                    f'clang-format -style=\'{{ColumnLimit: 100000,'
+                    f'AllowAllArgumentsOnNextLine: false, '
+                    f'AllowShortFunctionsOnASingleLine: false, '
+                    f'AllowShortLoopsOnASingleLine: false, '
+                    f'AllowShortCaseLabelsOnASingleLine: false, '
+                    f'BreakBeforeBraces: Allman, '
+                    f'BinPackArguments: true, '
+                    f'PenaltyBreakBeforeFirstCallParameter: 100000 }}\' {file} | gcc -fpreprocessed -dD -E -',
+                    stderr=subprocess.DEVNULL, shell=True, text=True, timeout=FORMAT_TIMEOUT)
+                # clang-format should also normalize any pragma lines (#pragma omp)
+                return result
+            except subprocess.CalledProcessError as e:
+                print("FormattingError in pre-processing file:")
+                print(file)
+                # print(e.output)
+                return ""
+            except UnicodeDecodeError as e:
+                print("UnicodeDecodeError in pre-processing file:")
+                print(file)
+                return ""
+        elif is_fortran_file(file):
+            # fprettyfy has a bug, when we want to read a file to stdin, so we need to cat and pipe
+            try:
+                formatted = subprocess.check_output(
+                    f'cat {file} | fprettify --strip-comments --disable-indent --disable-whitespace --line-length 1000000 ',
+                    stderr=subprocess.DEVNULL, shell=True, text=True, timeout=FORMAT_TIMEOUT)
+                # remove all comments
+                # l[l.find('!')+1:] will only include everything before the first ! (or all if no !)
+                lines = [l.strip() for l in formatted.splitlines()]
+                no_comments = [l[l.find('!') + 1:] if not l.upper().startswith('!$OMP') else l
+                               for l in lines if
+                               not (
+                                       l.startswith('c ') or l.startswith('C ')
+                                       or l.startswith('*') or l.startswith('d') or l.startswith('D')
+                                       or (l.startswith('!') and not l.upper().startswith('!$OMP'))
+                               )]
+
+                result = "\n".join(no_comments)
+
+                # normalize the pragma omp lines into one line
+                # free form
+                result = re.sub("&\n(\!\$(OMP|omp))", "", result)
+                # fixed form
+                result = re.sub("\n(\!\$(OMP|omp)&)", "", result)
+
+                # format everything into one line if a statement is split up
+                # & introduces a new line that may start immediately or after the next &
+                result = re.sub("&\n([ \t]*&)?", "", result)
+
+                # Fortran is case-insensitive: normalize to uppercase as the usual form
+                result = result.upper()
+
+                return result
+            except subprocess.CalledProcessError as e:
+                print("FormattingError in pre-processing file:")
+                print(file)
+                # print(e.output)
+                return ""
+            except UnicodeDecodeError as e:
+                print("UnicodeDecodeError in pre-processing file:")
+                print(file)
+                return ""
         else:
-            if is_c_file(file) or is_cpp_file(file):
-                try:
-                    result = subprocess.check_output(
-                        f'clang-format -style=\'{{ColumnLimit: 100000,'
-                        f'AllowAllArgumentsOnNextLine: false, '
-                        f'AllowShortFunctionsOnASingleLine: false, '
-                        f'AllowShortLoopsOnASingleLine: false, '
-                        f'AllowShortCaseLabelsOnASingleLine: false, '
-                        f'BreakBeforeBraces: Allman, '
-                        f'BinPackArguments: true, '
-                        f'PenaltyBreakBeforeFirstCallParameter: 100000 }}\' {file} | gcc -fpreprocessed -dD -E -',
-                        stderr=subprocess.DEVNULL, shell=True, text=True, timeout=FORMAT_TIMEOUT)
-                    # clang-format should also normalize any pragma lines (#pragma omp)
-                    self._normalized_files_cache[file] = result
-                    return result
-                except subprocess.CalledProcessError as e:
-                    print("FormattingError in pre-processing file:")
-                    print(file)
-                    # print(e.output)
-                    return ""
-                except UnicodeDecodeError as e:
-                    print("UnicodeDecodeError in pre-processing file:")
-                    print(file)
-                    return ""
-            elif is_fortran_file(file):
-                # fprettyfy has a bug, when we want to read a file to stdin, so we need to cat and pipe
-                try:
-                    formatted = subprocess.check_output(
-                        f'cat {file} | fprettify --strip-comments --disable-indent --disable-whitespace --line-length 1000000 ',
-                        stderr=subprocess.DEVNULL, shell=True, text=True, timeout=FORMAT_TIMEOUT)
-                    # remove all comments
-                    # l[l.find('!')+1:] will only include everything before the first ! (or all if no !)
-                    lines = [l.strip() for l in formatted.splitlines()]
-                    no_comments = [l[l.find('!') + 1:] if not l.upper().startswith('!$OMP') else l
-                                   for l in lines if
-                                   not (
-                                           l.startswith('c ') or l.startswith('C ')
-                                           or l.startswith('*') or l.startswith('d') or l.startswith('D')
-                                           or (l.startswith('!') and not l.upper().startswith('!$OMP'))
-                                   )]
-
-                    result = "\n".join(no_comments)
-
-                    # normalize the pragma omp lines into one line
-                    # free form
-                    result = re.sub("&\n(\!\$(OMP|omp))", "", result)
-                    # fixed form
-                    result = re.sub("\n(\!\$(OMP|omp)&)", "", result)
-
-                    # format everything into one line if a statement is split up
-                    # & introduces a new line that may start immediately or after the next &
-                    result = re.sub("&\n([ \t]*&)?", "", result)
-
-                    # Fortran is case-insensitive: normalize to uppercase as the usual form
-                    result = result.upper()
-
-                    self._normalized_files_cache[file] = result
-                    return result
-                except subprocess.CalledProcessError as e:
-                    print("FormattingError in pre-processing file:")
-                    print(file)
-                    # print(e.output)
-                    return ""
-                except UnicodeDecodeError as e:
-                    print("UnicodeDecodeError in pre-processing file:")
-                    print(file)
-                    return ""
-            else:
-                # print(f" file format not supported: {file} Skip this file")
-                pass
+            # print(f" file format not supported: {file} Skip this file")
+            pass
     return ""
 
 
@@ -161,5 +156,6 @@ class OpenmpAnalysis:
 
             except Exception as e:
                 pass
+                raise e
 
         return results
