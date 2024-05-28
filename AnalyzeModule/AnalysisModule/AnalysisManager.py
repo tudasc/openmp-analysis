@@ -3,6 +3,8 @@ import os
 from tqdm.auto import tqdm
 from datetime import datetime
 
+from AnalyzeModule.AnalysisModule.OpenMPPragmaAnalysis import OpenmpAnalysis
+
 tqdm.pandas()
 import pandas as pd
 from AnalysisModule.AsmAnalyzer import AsmAnalyzer
@@ -130,6 +132,11 @@ def analyze_asm_repo(row, print_analyzed_repos=True, print_analyzed_files=False)
             else:
                 if print_analyzed_files:
                     print("skip file %s" % this_file)
+    # finish analysis of assembly, analyze the src code for used pragmas
+    pragma_analyzer = OpenmpAnalysis()
+    pragma_results = pragma_analyzer(repo_path)
+    pragma_results.to_csv(os.path.join(outdir, "pragmas_used.csv"))
+
     if not row["keep"]:
         shutil.rmtree(repo_path)
 
