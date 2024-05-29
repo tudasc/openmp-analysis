@@ -11,6 +11,8 @@ def main():
         description="Collect data from all repositories into one large dataframe for later analysis")
     parser.add_argument('--output', default='result.csv',
                         help='output file')
+    parser.add_argument('--output_pragmas', default='pragma_result.csv',
+                        help='output file for the pragma analysis')
     parser.add_argument('--results_dir', default='RESULTS',
                         help='where the repos are listed with teh build instructions')
     parser.add_argument('--skip_o', action='store_true',default=False,
@@ -20,11 +22,17 @@ def main():
 
     base_dir = ARGS.results_dir
     df_full = pd.DataFrame()
+    df_full_pragma = pd.DataFrame()
     for root, dirs, files in os.walk(base_dir):
         for name in files:
             if name.endswith(".csv"):
-                if not name.endswith(".o.csv") or not ARGS.skip_o:
-                    this_repo = os.path.basename(os.path.normpath(root))
+                this_repo = os.path.basename(os.path.normpath(root))
+                if name == "pragmas_used.csv":
+                    this_file = os.path.join(root, name)
+                    this_df = pd.read_csv(this_file, index_col=0)
+                    this_df["Code"] = this_repo
+                    df_full_pragma = pd.concat([df_full_pragma, this_df])
+                elif not name.endswith(".o.csv") or not ARGS.skip_o:
                     this_file = os.path.join(root, name)
                     this_df = pd.read_csv(this_file, index_col=0)
                     this_df["Code"] = this_repo
@@ -33,6 +41,7 @@ def main():
                     df_full = pd.concat([df_full, this_df])
 
     df_full.to_csv(ARGS.output)
+    df_full_pragma.to_csv(ARGS.output_pragmas)
 
 
 if __name__ == '__main__':
