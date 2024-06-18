@@ -15,7 +15,7 @@ def main():
     args = Parser.parseInput()
 
     if args.mode == 'search':
-        command = 'python3 ./SearchModule/searchRepos.py'
+        command = 'python3 ./GithubSearchModule/searchRepos.py'
         command = command + ' --data_dir ' + args.data_dir
         command = command + ' --searchqueries ' + args.searchqueries
         command = command + ' --codequeries ' + args.codequeries

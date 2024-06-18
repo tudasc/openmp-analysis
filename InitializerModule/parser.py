@@ -14,9 +14,9 @@ class Parser:
         parser.add_argument('--data_dir', default='./data/raw', help='Location where the repositories should be lying')
         
         groupSparser = parser.add_argument_group('Search', 'Arguments when searching for github repos')
-        groupSparser.add_argument('--searchqueries', default='./SearchModule/queries/default_search.queries', action='store',
+        groupSparser.add_argument('--searchqueries', default='./GithubSearchModule/queries/default_search.queries', action='store',
                                   help='Path to the file containing the search query information')
-        groupSparser.add_argument('--codequeries', default='./SearchModule/queries/default_code.queries', action='store',
+        groupSparser.add_argument('--codequeries', default='./GithubSearchModule/queries/default_code.queries', action='store',
                                   help='Path to the file containing the code query information')
         groupSparser.add_argument('--api', nargs='?', default='rest', choices=['rest', 'graphql'], help='Specify search API (REST or GraphQL)')
         groupSparser.add_argument('--found_file', default='./data/found_repos.csv', action='store', help='Path where the file with the found repos should be lying')
